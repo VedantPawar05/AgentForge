@@ -46,3 +46,14 @@ Thumbs.db
 minio-data/
 postgres-data/
 redis-data/
+# Development artifacts
+scratch/
+*.bak
+README.old.md
+__pycache__/
+*.pyc
+
+# Environment secrets
+.env
+.env.*
+!.env.example
