@@ -11,7 +11,7 @@ export const envSchema = z
 
     // Database
     DATABASE_URL: z
-      .string({ required_error: "DATABASE_URL is required" })
+      .string({ error: "DATABASE_URL is required" })
       .min(1, "DATABASE_URL is required"),
 
     // Redis

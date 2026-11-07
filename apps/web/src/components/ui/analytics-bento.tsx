@@ -333,7 +333,6 @@ function SessionsChart({ desktop, mobile, labels, colors, tip }: { desktop: numb
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [W, H, sets, reduce, max]);
 
   const move = (e: React.PointerEvent) => {
@@ -510,7 +509,6 @@ function Radar({ values, axis, year, color, prefix, mono, tip }: { values: numbe
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [values, S, reduce]);
 
   const move = (e: React.PointerEvent) => {

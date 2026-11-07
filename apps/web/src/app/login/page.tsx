@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Shield, Lock, CheckCircle2 } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawRedirect = searchParams?.get("redirect") || "/dashboard";
@@ -490,3 +490,12 @@ export default function LoginPage() {
   );
 }
 
+
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: "#070709" }} />}>
+      <LoginForm />
+    </Suspense>
+  );
+}
