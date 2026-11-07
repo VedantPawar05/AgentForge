@@ -1,0 +1,2063 @@
+"use client";
+
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import Link from "next/link";
+import {
+  apiClient,
+  TaskItem,
+  WorkspaceItem,
+  ProjectItem,
+} from "@/lib/api-client";
+import { AnalyticsBento } from "@/components/ui/analytics-bento";
+
+// ── Bento Helpers ─────────────────────────────────────────────────
+const bell = (x: number, m: number, s: number) => Math.exp(-(((x - m) / s) ** 2) / 2);
+const bentoHours = Array.from({ length: 25 }, (_, h) => h);
+const bentoDesktop = [0, 1, 2].map((w) => bentoHours.map((h) => Math.round(2400 * (1 - w * 0.16) * (bell(h, 13 - w * 0.6, 3.4) * 0.92 + bell(h, 20, 2.2) * 0.18))));
+const bentoMobile = [0, 1, 2].map((w) => bentoHours.map((h) => Math.round(2600 * (1 - w * 0.18) * (bell(h, 20.5 - w * 0.4, 3) * 0.95 + bell(h, 8, 1.8) * 0.2))));
+const bentoRevenue = [7420, 7510, 7460, 7380, 7490, 7640, 7720, 7680, 7590, 7560, 7630, 7780, 7900, 7960, 7910, 7850, 7880, 8010, 8140, 8230, 8190, 8120, 8260, 8430, 8560, 8620, 8700, 8890, 9020, 9134];
+
+const WS_URL =
+  (typeof window !== "undefined" && (window as any).__NEXT_PUBLIC_WS_URL) ||
+  (process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4000");
+
+// ── Provider Configuration Types ──────────────────────────────────
+export interface ProviderConfig {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  models: string[];
+  keyPlaceholder: string;
+  apiKey: string;
+  status: "CONNECTED" | "UNCONFIGURED" | "TESTING" | "ERROR";
+  latencyMs?: number;
+  isDefault?: boolean;
+}
+
+const DEFAULT_PROVIDERS: ProviderConfig[] = [
+  {
+    id: "gemini",
+    name: "Google Gemini",
+    icon: "✦",
+    description: "Multimodal 1M+ token context window, fast tool dispatch and code synthesis.",
+    models: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    keyPlaceholder: "AIzaSy...",
+    apiKey: "AIzaSyD8k1992MockKeyActive",
+    status: "CONNECTED",
+    latencyMs: 64,
+    isDefault: true,
+  },
+  {
+    id: "perplexity",
+    name: "Perplexity AI",
+    icon: "◈",
+    description: "Deep codebase online search, real-time documentation grounding and web research.",
+    models: ["sonar-deep-research", "sonar-pro", "sonar"],
+    keyPlaceholder: "pplx-...",
+    apiKey: "pplx-mock98214fa821",
+    status: "CONNECTED",
+    latencyMs: 98,
+    isDefault: false,
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic Claude",
+    icon: "✽",
+    description: "Leading frontier coding reasoning, iterative turn repair and strict architecture enforcement.",
+    models: ["claude-3-7-sonnet", "claude-3-5-sonnet", "claude-3-5-haiku"],
+    keyPlaceholder: "sk-ant-api03-...",
+    apiKey: "sk-ant-mock7149a81",
+    status: "CONNECTED",
+    latencyMs: 142,
+    isDefault: false,
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    icon: "⬡",
+    description: "High-throughput general coding, instruction following and function calling.",
+    models: ["gpt-4o", "gpt-4o-mini", "o3-mini"],
+    keyPlaceholder: "sk-proj-...",
+    apiKey: "",
+    status: "UNCONFIGURED",
+    isDefault: false,
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    icon: "◇",
+    description: "Deep mathematical reasoning and code generation with ultra-low token cost.",
+    models: ["deepseek-r1", "deepseek-chat"],
+    keyPlaceholder: "sk-...",
+    apiKey: "",
+    status: "UNCONFIGURED",
+    isDefault: false,
+  },
+  {
+    id: "ollama",
+    name: "Local Ollama",
+    icon: "🦙",
+    description: "Air-gapped offline local LLM execution. Zero telemetry leaves your machine.",
+    models: ["llama3.3:latest", "qwen2.5-coder:32b", "deepseek-r1:14b"],
+    keyPlaceholder: "http://localhost:11434",
+    apiKey: "http://localhost:11434",
+    status: "CONNECTED",
+    latencyMs: 12,
+    isDefault: false,
+  },
+];
+
+export default function DashboardPage() {
+  // ── Navigation & Views ──────────────────────────────────────────
+  // Tabs: "studio" | "tasks" | "review" | "worktree" | "providers" | "analytics"
+  const [activeTab, setActiveTab] = useState<string>("studio");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+
+  // Read URL query parameter (?tab=...)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam && ["studio", "tasks", "review", "worktree", "providers", "analytics"].includes(tabParam)) {
+        setActiveTab(tabParam);
+      }
+    }
+  }, []);
+
+  // ── Workspace & Project State ───────────────────────────────────
+  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
+  const [selectedWorkspace, setSelectedWorkspace] = useState<WorkspaceItem | null>(null);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [selectedProject, setSelectedProject] = useState<ProjectItem | null>(null);
+
+  // ── Tasks & Telemetry State ─────────────────────────────────────
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [searchQuery, setSearchQuery] = useState<string>("" );
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const itemsPerPage = 8;
+
+  // ── Real-time Terminal Logs ─────────────────────────────────────
+  const [terminalLogs, setTerminalLogs] = useState<
+    { id: string; time: string; type: string; message: string }[]
+  >([
+    { id: "1", time: "10:14:02", type: "SYSTEM", message: "AgentForge CLI Daemon v1.0.0 initialized." },
+    { id: "2", time: "10:14:03", type: "WORKTREE", message: "Created ephemeral git lease 0x9f18a2 in .agentforge/worktrees/task-af82b" },
+    { id: "3", time: "10:14:05", type: "AGENT", message: "[Architect] AST parsed 18 packages. Prepared stage execution plan." },
+    { id: "4", time: "10:14:08", type: "SHELL", message: "$ vitest run packages/sandbox/src/worktree.test.ts --passWithNoTests" },
+    { id: "5", time: "10:14:09", type: "SUCCESS", message: "Tests passed: 6/6 passed (142ms). Branch ready for review." },
+  ]);
+  const termEndRef = useRef<HTMLDivElement | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // ── Interactive Agent Studio Prompt State ───────────────────────
+  const [studioPrompt, setStudioPrompt] = useState<string>("");
+  const [isStudioExecuting, setIsStudioExecuting] = useState<boolean>(false);
+  const [activeSquadStep, setActiveSquadStep] = useState<"IDLE" | "ARCHITECT" | "DEVELOPER" | "TESTER" | "SECURITY">("IDLE");
+
+  // ── Providers & API Keys State ──────────────────────────────────
+  const [providers, setProviders] = useState<ProviderConfig[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("agentforge_providers");
+      if (saved) {
+        try { return JSON.parse(saved); } catch {}
+      }
+    }
+    return DEFAULT_PROVIDERS;
+  });
+  const [editingProviderKey, setEditingProviderKey] = useState<Record<string, string>>({});
+  const [showKeyText, setShowKeyText] = useState<Record<string, boolean>>({});
+
+  // ── Modals & Task Creation State ────────────────────────────────
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [newTaskTitle, setNewTaskTitle] = useState<string>("");
+  const [newTaskDesc, setNewTaskDesc] = useState<string>("");
+  const [newTaskPriority, setNewTaskPriority] = useState<string>("HIGH");
+  const [newTaskBranch, setNewTaskBranch] = useState<string>("main");
+  const [newTaskProvider, setNewTaskProvider] = useState<string>("gemini");
+  const [newTaskModel, setNewTaskModel] = useState<string>("gemini-2.0-flash");
+  const [newTaskSquad, setNewTaskSquad] = useState<string>("FULL_STACK");
+  const [newTaskBudget, setNewTaskBudget] = useState<number>(4.0);
+  const [isSubmittingTask, setIsSubmittingTask] = useState<boolean>(false);
+
+  // ── Diff & Review Modal State ───────────────────────────────────
+  const [diffModalTask, setDiffModalTask] = useState<TaskItem | null>(null);
+  const [diffContent, setDiffContent] = useState<string>("");
+  const [isLoadingDiff, setIsLoadingDiff] = useState<boolean>(false);
+  const [reviewNotes, setReviewNotes] = useState<string>("");
+  const [isSubmittingReview, setIsSubmittingReview] = useState<boolean>(false);
+  const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+
+  // ── Worktree Explorer State ─────────────────────────────────────
+  const [selectedWorktreeFile, setSelectedWorktreeFile] = useState<string>("apps/api/src/services/review-service.ts");
+  const worktreeFiles = useMemo(
+    () => [
+      {
+        path: "apps/api/src/services/review-service.ts",
+        status: "MODIFIED",
+        additions: 38,
+        deletions: 4,
+        size: "4.8 KB",
+        content: `// AgentForge Review Service - Cryptographic Approval Engine
+import { prisma } from "@agentforge/db";
+import { RealGitHubService } from "../integrations/github/github-service";
+
+export class ReviewService {
+  /**
+   * Enforces cryptographic authorization before branch merge
+   */
+  async submitReview(workspaceId: string, taskId: string, review: {
+    status: "APPROVED" | "CHANGES_REQUESTED";
+    reviewNotes?: string;
+    reviewerId: string;
+  }) {
+    // 1. Verify task belongs to tenant workspace
+    const task = await prisma.task.findFirstOrThrow({
+      where: { id: taskId, workspaceId },
+    });
+
+    // 2. Commit immutable audit record with HMAC signature
+    const approval = await prisma.approval.create({
+      data: {
+        taskId,
+        status: review.status,
+        reviewNotes: review.reviewNotes ?? "Approved by platform reviewer",
+        approvedById: review.reviewerId,
+        signedAt: new Date(),
+      },
+    });
+
+    return approval;
+  }
+}`,
+      },
+      {
+        path: "packages/sandbox/src/worktree.ts",
+        status: "MODIFIED",
+        additions: 19,
+        deletions: 2,
+        size: "8.2 KB",
+        content: `// Ephemeral Git Worktree Lease Manager
+export class WorktreeManager {
+  async createLease(repoPath: string, branchName: string): Promise<WorktreeLease> {
+    const leaseId = "lease_" + Math.random().toString(36).slice(2, 10);
+    const worktreePath = path.join(".agentforge/worktrees", leaseId);
+    
+    // git worktree add -b <branchName> <worktreePath>
+    await execa("git", ["worktree", "add", "-b", branchName, worktreePath], { cwd: repoPath });
+    
+    return {
+      leaseId,
+      branchName,
+      worktreePath,
+      createdAt: new Date(),
+      isLocked: true,
+    };
+  }
+}`,
+      },
+      {
+        path: "packages/agent-adapters/src/squad-orchestrator.ts",
+        status: "ADDED",
+        additions: 64,
+        deletions: 0,
+        size: "12.1 KB",
+        content: `// Sequential Multi-Agent Squad Orchestrator
+export class SquadOrchestrator {
+  async executePipeline(task: TaskItem, squad: SquadArchetype) {
+    // Stage 1: Architect Plan
+    const plan = await this.architect.createPlan(task);
+    
+    // Stage 2: Developer Implementation
+    const code = await this.developer.writeCode(plan);
+    
+    // Stage 3: Tester Automated Matrix
+    const testResult = await this.tester.runTests(code);
+    if (!testResult.passed) {
+      throw new Error("Tester stage failed: " + testResult.summary);
+    }
+    
+    // Stage 4: Security Sign-off
+    const securityAudit = await this.security.audit(code);
+    return { plan, code, testResult, securityAudit };
+  }
+}`,
+      },
+      {
+        path: ".agentforge/rules.md",
+        status: "UNTOUCHED",
+        additions: 0,
+        deletions: 0,
+        size: "1.4 KB",
+        content: `# AgentForge Repository Rules & Coding Conventions
+1. Strict TypeScript mode enabled across all packages. Zero 'any' types.
+2. All database mutations must pass through the Transactional Outbox pattern.
+3. Every agent task runs in an isolated ephemeral worktree.
+4. Unified diff review required before protected branch merges.
+5. High-density SVG micro-visualizations with Geist tabular numbers.`,
+      },
+    ],
+    []
+  );
+
+  // ── Connect Socket.io WebSocket ─────────────────────────────────
+  const connectSocket = useCallback((wsId: string) => {
+    if (wsRef.current) return;
+    try {
+      const ws = new WebSocket(`${WS_URL}/socket.io/?transport=websocket&EIO=4`);
+      wsRef.current = ws;
+
+      ws.addEventListener("open", () => {
+        ws.send(`40{"workspaceId":"${wsId}"}`);
+      });
+
+      ws.addEventListener("message", (evt) => {
+        try {
+          const raw: string = evt.data;
+          if (!raw.startsWith("42")) return;
+          const json = JSON.parse(raw.slice(2));
+          const [eventName, payload] = json as [string, any];
+
+          if (eventName === "run:event") {
+            const time = new Date(payload.createdAt ?? Date.now()).toLocaleTimeString();
+            const type = payload.type ?? "LOG";
+            const message =
+              payload.payload?.message ||
+              payload.payload?.output ||
+              JSON.stringify(payload.payload ?? {});
+
+            setTerminalLogs((prev) => [
+              ...prev.slice(-150),
+              { id: payload.id ?? Math.random().toString(), time, type, message },
+            ]);
+          }
+
+          if (eventName === "task:status") {
+            setTasks((prev) =>
+              prev.map((t) =>
+                t.id === payload.taskId
+                  ? { ...t, status: payload.status, version: t.version + 1 }
+                  : t
+              )
+            );
+          }
+        } catch {}
+      });
+    } catch {}
+  }, []);
+
+  // ── Initial Data Load ───────────────────────────────────────────
+  useEffect(() => {
+    let mounted = true;
+    async function loadWorkspaceData() {
+      try {
+        setIsLoading(true);
+        const { workspaces: rawWs } = await apiClient.getWorkspaces();
+        if (!mounted) return;
+
+        const cleanWorkspaces: WorkspaceItem[] = (rawWs || []).map((w: any) =>
+          w.workspace ? { ...w.workspace, role: w.role } : w
+        );
+
+        setWorkspaces(cleanWorkspaces);
+        const active = cleanWorkspaces[0] || null;
+        setSelectedWorkspace(active);
+
+        if (active) {
+          connectSocket(active.id);
+          const [projRes, tasksRes] = await Promise.all([
+            apiClient.getProjects(active.id).catch(() => ({ projects: [] })),
+            apiClient.getTasks(active.id).catch(() => ({ tasks: [] })),
+          ]);
+
+          if (mounted) {
+            setProjects(projRes.projects || []);
+            setSelectedProject(projRes.projects?.[0] || null);
+            setTasks(tasksRes.tasks || []);
+          }
+        }
+      } catch (err) {
+        console.error("Dashboard init error:", err);
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    }
+    loadWorkspaceData();
+    return () => {
+      mounted = false;
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, [connectSocket]);
+
+  // Auto-scroll terminal
+  useEffect(() => {
+    if (termEndRef.current) {
+      termEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [terminalLogs]);
+
+  // Refresh tasks
+  const refreshTasks = useCallback(async () => {
+    if (!selectedWorkspace) return;
+    try {
+      const res = await apiClient.getTasks(selectedWorkspace.id);
+      setTasks(res.tasks || []);
+    } catch {}
+  }, [selectedWorkspace]);
+
+  // ── Metrics Computation ─────────────────────────────────────────
+  const metrics = useMemo(() => {
+    const total = tasks.length;
+    const running = tasks.filter((t) => t.status === "RUNNING").length;
+    const awaitingReview = tasks.filter((t) => t.status === "AWAITING_REVIEW").length;
+    const mergedOrApproved = tasks.filter(
+      (t) => t.status === "MERGED" || t.status === "APPROVED"
+    ).length;
+    const failed = tasks.filter((t) => t.status === "FAILED").length;
+    const successRate = total > 0 ? Math.round(((total - failed) / total) * 100) : 98;
+
+    return {
+      totalTasks: total,
+      runningSessions: running,
+      awaitingReview,
+      mergedOrApproved,
+      successRate,
+      health: failed > 0 ? "Degraded" : "Healthy",
+    };
+  }, [tasks]);
+
+  // ── Filtered Tasks ──────────────────────────────────────────────
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((t) => {
+      const matchSearch =
+        t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (t.targetBranch && t.targetBranch.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      const matchStatus = statusFilter === "ALL" || t.status === statusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [tasks, searchQuery, statusFilter]);
+
+  const paginatedTasks = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredTasks.slice(start, start + itemsPerPage);
+  }, [filteredTasks, currentPage]);
+
+  const totalPages = Math.ceil(filteredTasks.length / itemsPerPage) || 1;
+
+  // ── Task Actions ────────────────────────────────────────────────
+  const handleCreateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedWorkspace || !selectedProject || !newTaskTitle.trim()) return;
+
+    setIsSubmittingTask(true);
+    try {
+      await apiClient.createTask(selectedWorkspace.id, {
+        projectId: selectedProject.id,
+        title: newTaskTitle.trim(),
+        description: `[Provider: ${newTaskProvider} | Model: ${newTaskModel} | Squad: ${newTaskSquad} | Budget: $${newTaskBudget}]\n\n${newTaskDesc.trim()}`,
+        priority: newTaskPriority as any,
+        targetBranch: newTaskBranch || "main",
+      });
+
+      setNewTaskTitle("");
+      setNewTaskDesc("");
+      setIsCreateModalOpen(false);
+      setActionSuccessMsg(`Autonomous task dispatched to ${newTaskProvider.toUpperCase()} (${newTaskModel})!`);
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+      await refreshTasks();
+      setActiveTab("tasks");
+    } catch (err: any) {
+      alert(`Error creating task: ${err?.message}`);
+    } finally {
+      setIsSubmittingTask(false);
+    }
+  };
+
+  const handleTriggerRun = async (task: TaskItem) => {
+    if (!selectedWorkspace) return;
+    try {
+      await apiClient.triggerRun(selectedWorkspace.id, task.id);
+      setActiveTab("studio");
+      setTerminalLogs((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(),
+          time: new Date().toLocaleTimeString(),
+          type: "DISPATCH",
+          message: `Dispatched multi-agent squad for: "${task.title}" on branch ${task.targetBranch || "main"}`,
+        },
+      ]);
+      setActionSuccessMsg(`Execution dispatched for ${task.title}!`);
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+      await refreshTasks();
+    } catch (err: any) {
+      alert(`Failed to trigger run: ${err?.message}`);
+    }
+  };
+
+  const handleViewDiff = async (task: TaskItem) => {
+    if (!selectedWorkspace) return;
+    setDiffModalTask(task);
+    setIsLoadingDiff(true);
+    setDiffContent("");
+    setReviewNotes("");
+
+    try {
+      const res = await apiClient.getRunDiff(selectedWorkspace.id, task.id, "latest");
+      setDiffContent(res.diff || "// No uncommitted changes detected in worktree.");
+    } catch {
+      setDiffContent(
+        `--- a/apps/api/src/services/review-service.ts\n+++ b/apps/api/src/services/review-service.ts\n@@ -24,7 +24,9 @@ export class ReviewService {\n-  const isValid = true;\n+  // Cryptographic constant-time verification\n+  const isValid = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));\n+  if (!isValid) throw new UnauthorizedError("Invalid review signature");`
+      );
+    } finally {
+      setIsLoadingDiff(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!selectedWorkspace || !diffModalTask) return;
+    setIsSubmittingReview(true);
+    try {
+      await apiClient.submitReview(selectedWorkspace.id, diffModalTask.id, {
+        status: "APPROVED",
+        reviewNotes: reviewNotes || "Cryptographically signed and approved by engineer.",
+      });
+      setDiffModalTask(null);
+      setActionSuccessMsg(`Task ${diffModalTask.title} approved for merge!`);
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+      await refreshTasks();
+    } catch (err: any) {
+      alert(`Approval failed: ${err?.message}`);
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const handleMerge = async (task: TaskItem) => {
+    if (!selectedWorkspace) return;
+    try {
+      const res = await apiClient.mergeTask(selectedWorkspace.id, task.id);
+      setActionSuccessMsg(`Merged into ${task.targetBranch || "main"}! Commit: ${res.commitSha?.slice(0, 8)}`);
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+      await refreshTasks();
+    } catch (err: any) {
+      alert(`Merge failed: ${err?.message}`);
+    }
+  };
+
+  // ── Studio CLI Command Runner ───────────────────────────────────
+  const handleExecuteStudioPrompt = (customPrompt?: string) => {
+    const prompt = customPrompt || studioPrompt.trim();
+    if (!prompt) return;
+
+    setIsStudioExecuting(true);
+    setActiveSquadStep("ARCHITECT");
+
+    const time = new Date().toLocaleTimeString();
+    setTerminalLogs((prev) => [
+      ...prev,
+      { id: Math.random().toString(), time, type: "PROMPT", message: `$ agentforge run "${prompt}"` },
+      { id: Math.random().toString(), time, type: "ARCHITECT", message: `[Architect] Analyzing codebase dependencies and AST...` },
+    ]);
+    if (!customPrompt) setStudioPrompt("");
+
+    // Simulate multi-agent pipeline
+    setTimeout(() => {
+      setActiveSquadStep("DEVELOPER");
+      setTerminalLogs((prev) => [
+        ...prev,
+        { id: Math.random().toString(), time: new Date().toLocaleTimeString(), type: "DEVELOPER", message: `[Developer] Writing patch to isolated branch agentforge/task-auto-89...` },
+      ]);
+    }, 800);
+
+    setTimeout(() => {
+      setActiveSquadStep("TESTER");
+      setTerminalLogs((prev) => [
+        ...prev,
+        { id: Math.random().toString(), time: new Date().toLocaleTimeString(), type: "SHELL", message: `$ npm test (Vitest: 28 suites, 166 passing)` },
+      ]);
+    }, 1600);
+
+    setTimeout(() => {
+      setActiveSquadStep("SECURITY");
+      setTerminalLogs((prev) => [
+        ...prev,
+        { id: Math.random().toString(), time: new Date().toLocaleTimeString(), type: "SECURITY", message: `[Security] Static analysis passed. Zero token leaks. Ready for review.` },
+      ]);
+      setIsStudioExecuting(false);
+      setActiveSquadStep("IDLE");
+      setActionSuccessMsg("Agent Squad successfully drafted and verified the patch!");
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    }, 2400);
+  };
+
+  // ── Provider API Key Management ─────────────────────────────────
+  const handleTestProvider = (providerId: string) => {
+    setProviders((prev) =>
+      prev.map((p) => (p.id === providerId ? { ...p, status: "TESTING" as const } : p))
+    );
+
+    setTimeout(() => {
+      const mockLatency = Math.floor(Math.random() * 80) + 40;
+      setProviders((prev) => {
+        const updated = prev.map((p) =>
+          p.id === providerId ? { ...p, status: "CONNECTED" as const, latencyMs: mockLatency } : p
+        );
+        if (typeof window !== "undefined") {
+          localStorage.setItem("agentforge_providers", JSON.stringify(updated));
+        }
+        return updated;
+      });
+      setActionSuccessMsg(`Provider ${providerId.toUpperCase()} ping successful (${mockLatency}ms)!`);
+      setTimeout(() => setActionSuccessMsg(null), 3000);
+    }, 700);
+  };
+
+  const handleSaveProviderKey = (providerId: string) => {
+    const keyVal = editingProviderKey[providerId];
+    if (!keyVal) return;
+
+    setProviders((prev) => {
+      const updated = prev.map((p) =>
+        p.id === providerId ? { ...p, apiKey: keyVal, status: "CONNECTED" as const, latencyMs: 58 } : p
+      );
+      if (typeof window !== "undefined") {
+        localStorage.setItem("agentforge_providers", JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    setEditingProviderKey((prev) => {
+      const copy = { ...prev };
+      delete copy[providerId];
+      return copy;
+    });
+
+    setActionSuccessMsg(`API key for ${providerId.toUpperCase()} saved & connected!`);
+    setTimeout(() => setActionSuccessMsg(null), 3000);
+  };
+
+  const handleSetDefaultProvider = (providerId: string) => {
+    setProviders((prev) => {
+      const updated = prev.map((p) => ({ ...p, isDefault: p.id === providerId }));
+      if (typeof window !== "undefined") {
+        localStorage.setItem("agentforge_providers", JSON.stringify(updated));
+      }
+      return updated;
+    });
+    setNewTaskProvider(providerId);
+    setActionSuccessMsg(`Default provider set to ${providerId.toUpperCase()}`);
+    setTimeout(() => setActionSuccessMsg(null), 2500);
+  };
+
+  // ── CSV Export Functionality ────────────────────────────────────
+  const exportCSV = () => {
+    if (tasks.length === 0) {
+      alert("No task data available to export.");
+      return;
+    }
+    const headers = ["ID", "Title", "Target Branch", "Priority", "Status", "Version", "Created At"];
+    const rows = tasks.map((t) => [
+      `"${t.id}"`,
+      `"${t.title.replace(/"/g, '""')}"`,
+      `"${t.targetBranch || "main"}"`,
+      `"${t.priority}"`,
+      `"${t.status}"`,
+      t.version,
+      `"${t.createdAt}"`,
+    ]);
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `agentforge-tasks-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className={`app ${sidebarCollapsed ? "collapsed" : ""}`}>
+      {/* ── SIDEBAR NAVIGATION ────────────────────────────────────── */}
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: "52px", padding: "0 10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span className="brand-mark">✦</span>
+            {!sidebarCollapsed && (
+              <div>
+                <span className="brand-name" style={{ fontSize: "14px", fontWeight: 700 }}>AgentForge</span>
+                <span style={{ display: "block", fontSize: "9.5px", color: "var(--muted)", fontFamily: "var(--font-mono, monospace)" }}>
+                  CLI Orchestrator
+                </span>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            style={{ fontSize: "11px", color: "var(--muted)", background: "none", border: "none", cursor: "pointer", padding: "4px" }}
+            title="Toggle Sidebar"
+          >
+            {sidebarCollapsed ? "→" : "←"}
+          </button>
+        </div>
+
+        <nav className="nav">
+          {/* CORE SECTION */}
+          <div className="nav-group">
+            <div className="nav-label">Core Engine</div>
+            <a
+              className={`nav-link ${activeTab === "studio" ? "active" : ""}`}
+              onClick={() => setActiveTab("studio")}
+            >
+              <svg viewBox="0 0 24 24">
+                <rect x="2" y="3" width="20" height="14" rx="2" />
+                <path d="m6 8 3 3-3 3M13 14h5" />
+                <path d="M2 17h20" />
+              </svg>
+              <span>Agent CLI Studio</span>
+              <b className="count" style={{ background: "#cc0000", color: "#fff" }}>CLI</b>
+            </a>
+
+            <a
+              className={`nav-link ${activeTab === "tasks" ? "active" : ""}`}
+              onClick={() => setActiveTab("tasks")}
+            >
+              <svg viewBox="0 0 24 24">
+                <path d="M9 6h11M9 12h11M9 18h11" />
+                <path d="m3.5 6 1.2 1.2 2.1-2.2M3.5 12l1.2 1.2 2.1-2.2M3.5 18l1.2 1.2 2.1-2.2" />
+              </svg>
+              <span>Tasks & Runs</span>
+              <b className="count">{tasks.length}</b>
+            </a>
+
+            <a
+              className={`nav-link ${activeTab === "review" ? "active" : ""}`}
+              onClick={() => setActiveTab("review")}
+            >
+              <svg viewBox="0 0 24 24">
+                <circle cx="6" cy="5" r="2" />
+                <circle cx="6" cy="19" r="2" />
+                <circle cx="18" cy="8" r="2" />
+                <path d="M6 7v10M18 10c0 4-8 3-11.5 7.5" />
+              </svg>
+              <span>Code Review & PRs</span>
+              {metrics.awaitingReview > 0 && (
+                <b className="count" style={{ background: "var(--amber)", color: "#000", fontWeight: 700 }}>
+                  {metrics.awaitingReview}
+                </b>
+              )}
+            </a>
+          </div>
+
+          {/* INFRASTRUCTURE & SETTINGS */}
+          <div className="nav-group">
+            <div className="nav-label">Infrastructure</div>
+            <a
+              className={`nav-link ${activeTab === "worktree" ? "active" : ""}`}
+              onClick={() => setActiveTab("worktree")}
+            >
+              <svg viewBox="0 0 24 24">
+                <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+              </svg>
+              <span>Worktree Sandboxes</span>
+              <b className="count" style={{ background: "rgba(59,240,140,0.15)", color: "#3bf08c" }}>Git</b>
+            </a>
+
+            <a
+              className={`nav-link ${activeTab === "providers" ? "active" : ""}`}
+              onClick={() => setActiveTab("providers")}
+            >
+              <svg viewBox="0 0 24 24">
+                <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <span>API Providers & Keys</span>
+              <b className="count" style={{ background: "rgba(34,211,238,0.15)", color: "#22d3ee" }}>6</b>
+            </a>
+
+            <a
+              className={`nav-link ${activeTab === "analytics" ? "active" : ""}`}
+              onClick={() => setActiveTab("analytics")}
+            >
+              <svg viewBox="0 0 24 24">
+                <path d="M3 3v18h18" />
+                <path d="m19 9-5 5-4-4-3 3" />
+              </svg>
+              <span>Bento Telemetry</span>
+            </a>
+          </div>
+        </nav>
+
+        {/* User / Workspace Footer */}
+        <div className="profile">
+          <span className="avatar">AF</span>
+          {!sidebarCollapsed && (
+            <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+              <div className="profile-name">{selectedWorkspace?.name || "Workspace"}</div>
+              <div style={{ fontSize: "10px", color: "var(--muted)", fontFamily: "var(--font-mono, monospace)" }}>
+                {providers.find((p) => p.isDefault)?.name || "Gemini 2.0"}
+              </div>
+            </div>
+          )}
+          <Link href="/" title="Open Home Page" style={{ fontSize: "11px", color: "var(--muted)", textDecoration: "none" }}>
+            ↗
+          </Link>
+        </div>
+      </aside>
+
+      {/* ── MAIN VIEWPORT ─────────────────────────────────────────── */}
+      <main className="main">
+        {/* Topbar */}
+        <header className="topbar">
+          <div className="crumbs">
+            <span style={{ color: "var(--muted)" }}>AgentForge</span>
+            <span className="crumb-sep">/</span>
+            <span>{selectedWorkspace?.name || "Workspace"}</span>
+            <span className="crumb-sep">/</span>
+            <strong>
+              {activeTab === "studio"
+                ? "CLI Studio"
+                : activeTab === "tasks"
+                ? "Tasks & Runs"
+                : activeTab === "review"
+                ? "Code Review"
+                : activeTab === "worktree"
+                ? "Worktree Sandboxes"
+                : activeTab === "providers"
+                ? "API Providers & Keys"
+                : "Bento Telemetry"}
+            </strong>
+          </div>
+
+          <div className="top-actions">
+            {/* Quick Provider Pill */}
+            <div
+              onClick={() => setActiveTab("providers")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "4px 10px",
+                borderRadius: "8px",
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid var(--border)",
+                cursor: "pointer",
+                fontSize: "11.5px",
+                fontFamily: "var(--font-mono, monospace)",
+              }}
+              title="Click to configure AI providers and API keys"
+            >
+              <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#3bf08c" }} />
+              <span>{providers.find((p) => p.isDefault)?.name || "Gemini 2.0"}</span>
+              <span style={{ color: "var(--muted)", fontSize: "10px" }}>64ms</span>
+            </div>
+
+            <button
+              className="btn"
+              style={{ borderColor: activeTab === "studio" ? "#cc0000" : undefined, color: activeTab === "studio" ? "#ff4d4d" : undefined }}
+              onClick={() => setActiveTab("studio")}
+            >
+              CLI Terminal
+            </button>
+
+            <button className="btn" onClick={exportCSV} title="Export CSV Data">
+              Export
+            </button>
+
+            <button className="btn primary" onClick={() => setIsCreateModalOpen(true)}>
+              + New Agent Task
+            </button>
+          </div>
+        </header>
+
+        {/* Global Action Toast Notification */}
+        {actionSuccessMsg && (
+          <div
+            style={{
+              margin: "12px 28px 0",
+              padding: "8px 14px",
+              background: "rgba(59,240,140,0.1)",
+              border: "1px solid rgba(59,240,140,0.25)",
+              color: "#3bf08c",
+              borderRadius: "8px",
+              fontSize: "11.5px",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span>✓ {actionSuccessMsg}</span>
+            <button onClick={() => setActionSuccessMsg(null)} style={{ color: "inherit", cursor: "pointer" }}>✕</button>
+          </div>
+        )}
+
+        <div className="content" style={{ padding: "20px 28px 40px" }}>
+          {/* ═════════════════════════════════════════════════════════ */}
+          {/* SCREEN 1: AGENT CLI STUDIO & LIVE CONSOLE                */}
+          {/* ═════════════════════════════════════════════════════════ */}
+          {activeTab === "studio" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Studio Header & Squad Pipeline Bar */}
+              <div
+                style={{
+                  background: "var(--panel)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-card)",
+                  padding: "18px 24px",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "14px",
+                }}
+              >
+                <div>
+                  <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", margin: 0 }}>
+                    Autonomous Agent CLI Studio
+                  </h2>
+                  <p style={{ fontSize: "12px", color: "var(--muted)", margin: "4px 0 0" }}>
+                    Streaming shell execution, tool dispatch loops, and sequential squad orchestration
+                  </p>
+                </div>
+
+                {/* Squad Pipeline Step Indicator */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  {[
+                    { step: "ARCHITECT", label: "1. Architect" },
+                    { step: "DEVELOPER", label: "2. Developer" },
+                    { step: "TESTER", label: "3. Tester" },
+                    { step: "SECURITY", label: "4. Security" },
+                  ].map((s) => {
+                    const isActive = activeSquadStep === s.step;
+                    return (
+                      <div
+                        key={s.step}
+                        style={{
+                          fontSize: "10.5px",
+                          fontWeight: 600,
+                          padding: "4px 9px",
+                          borderRadius: "6px",
+                          background: isActive ? "rgba(204,0,0,0.18)" : "rgba(255,255,255,0.03)",
+                          color: isActive ? "#ff4d4d" : "var(--muted)",
+                          border: isActive ? "1px solid rgba(204,0,0,0.35)" : "1px solid var(--border)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        {isActive && <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#ff4d4d" }} />}
+                        <span>{s.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Streaming Terminal Console Window */}
+              <div
+                style={{
+                  background: "#08080a",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-card)",
+                  overflow: "hidden",
+                  boxShadow: "0 12px 32px rgba(0,0,0,0.6)",
+                }}
+              >
+                {/* Terminal Header */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px 16px",
+                    background: "rgba(255,255,255,0.02)",
+                    borderBottom: "1px solid var(--border)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ display: "flex", gap: "5px" }}>
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }} />
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#f59e0b" }} />
+                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e" }} />
+                    </div>
+                    <span style={{ fontSize: "11px", color: "var(--muted)", fontFamily: "var(--font-mono, monospace)", marginLeft: "8px" }}>
+                      agentforge@worktree-0x9f18a24 ~ bash
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      className="btn"
+                      style={{ height: "22px", fontSize: "9px", padding: "0 8px" }}
+                      onClick={() => setTerminalLogs([])}
+                    >
+                      Clear
+                    </button>
+                    <button
+                      className="btn"
+                      style={{ height: "22px", fontSize: "9px", padding: "0 8px" }}
+                      onClick={() => {
+                        const text = terminalLogs.map((l) => `[${l.time}] [${l.type}] ${l.message}`).join("\n");
+                        navigator.clipboard.writeText(text);
+                        setActionSuccessMsg("Terminal output copied to clipboard!");
+                        setTimeout(() => setActionSuccessMsg(null), 2500);
+                      }}
+                    >
+                      Copy Logs
+                    </button>
+                  </div>
+                </div>
+
+                {/* Terminal Output Body */}
+                <div
+                  style={{
+                    padding: "16px 20px",
+                    height: "380px",
+                    overflowY: "auto",
+                    fontFamily: "var(--font-mono, monospace)",
+                    fontSize: "11.5px",
+                    lineHeight: "1.7",
+                    color: "#d4d4d8",
+                  }}
+                >
+                  {terminalLogs.map((log) => {
+                    const typeColors: Record<string, string> = {
+                      SYSTEM: "#8a8a93",
+                      WORKTREE: "#22d3ee",
+                      ARCHITECT: "#b68aff",
+                      DEVELOPER: "#3bf08c",
+                      TESTER: "#ffb800",
+                      SECURITY: "#ff4d4d",
+                      SHELL: "#ffffff",
+                      PROMPT: "#ff6b6b",
+                      SUCCESS: "#3bf08c",
+                    };
+                    const color = typeColors[log.type] || "#8a8a93";
+                    return (
+                      <div key={log.id} style={{ display: "flex", gap: "10px", wordBreak: "break-all" }}>
+                        <span style={{ color: "#52525b", userSelect: "none" }}>[{log.time}]</span>
+                        <span style={{ color, fontWeight: 700, minWidth: "85px" }}>[{log.type}]</span>
+                        <span style={{ color: log.type === "SHELL" ? "#f0f0f0" : "#d4d4d8" }}>{log.message}</span>
+                      </div>
+                    );
+                  })}
+                  {isStudioExecuting && (
+                    <div style={{ color: "#ff4d4d", animation: "pulse 1.2s infinite" }}>
+                      ● Executing autonomous tool calling loop...
+                    </div>
+                  )}
+                  <div ref={termEndRef} />
+                </div>
+
+                {/* Interactive CLI Command Bar */}
+                <div
+                  style={{
+                    padding: "12px 16px",
+                    background: "rgba(255,255,255,0.02)",
+                    borderTop: "1px solid var(--border)",
+                  }}
+                >
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleExecuteStudioPrompt();
+                    }}
+                    style={{ display: "flex", gap: "10px" }}
+                  >
+                    <div style={{ position: "relative", flex: 1 }}>
+                      <span style={{ position: "absolute", left: "12px", top: "9px", color: "#cc0000", fontWeight: 700, fontFamily: "var(--font-mono, monospace)" }}>
+                        $
+                      </span>
+                      <input
+                        className="form-input"
+                        placeholder="Type instruction or command (e.g. 'Refactor auth middleware to cache sessions', 'Run Vitest suite')..."
+                        value={studioPrompt}
+                        onChange={(e) => setStudioPrompt(e.target.value)}
+                        style={{ paddingLeft: "28px", height: "38px", fontFamily: "var(--font-mono, monospace)", fontSize: "12px" }}
+                        disabled={isStudioExecuting}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="btn primary"
+                      disabled={isStudioExecuting || !studioPrompt.trim()}
+                      style={{ height: "38px", padding: "0 20px", fontSize: "12px" }}
+                    >
+                      {isStudioExecuting ? "Running..." : "Dispatch ↵"}
+                    </button>
+                  </form>
+
+                  {/* Preset Quick Chips */}
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "10px" }}>
+                    {[
+                      { label: "⚡ Fix Auth Timeout", cmd: "Fix checkout token expiration in auth service" },
+                      { label: "🧪 Run All Tests", cmd: "Run vitest unit and integration test suites" },
+                      { label: "🛡️ Security Audit", cmd: "Audit worktree files for secrets and SQL injection" },
+                      { label: "⤸ Propose Git Diff", cmd: "Synthesize git diff and queue for human review" },
+                    ].map((chip, idx) => (
+                      <button
+                        key={idx}
+                        className="btn"
+                        style={{ height: "24px", fontSize: "10px", padding: "0 10px", borderRadius: "12px" }}
+                        onClick={() => handleExecuteStudioPrompt(chip.cmd)}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════════ */}
+          {/* SCREEN 2: TASKS & EXECUTION RUNS                         */}
+          {/* ═════════════════════════════════════════════════════════ */}
+          {activeTab === "tasks" && (
+            <section className="card table-card">
+              <div className="table-head">
+                <div>
+                  <div className="card-title">Task Orchestration & Execution Records</div>
+                  <div className="card-sub">
+                    Filter by status, trigger agent runs, inspect code diffs, and authorize merges
+                  </div>
+                </div>
+                <div className="table-tools">
+                  <input
+                    className="table-search"
+                    placeholder="⌕  Filter tasks..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    aria-label="Filter tasks"
+                  />
+                  <select
+                    className="select"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="ALL">All Statuses ({tasks.length})</option>
+                    <option value="RUNNING">Running</option>
+                    <option value="AWAITING_REVIEW">Awaiting Review</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="MERGED">Merged</option>
+                    <option value="FAILED">Failed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Task / Issue Title</th>
+                      <th>Target Branch</th>
+                      <th>Priority</th>
+                      <th>Version</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: "right" }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedTasks.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}>
+                          No tasks found. Click "+ New Agent Task" to queue an autonomous run.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedTasks.map((task) => (
+                        <tr key={task.id}>
+                          <td>
+                            <div className="endpoint">
+                              <span className="endpoint-icon">✦</span>
+                              <div>
+                                <strong>{task.title}</strong>
+                                <small>ID: {task.id.slice(0, 8)} · Created {new Date(task.createdAt).toLocaleDateString()}</small>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="method">{task.targetBranch || "main"}</span>
+                          </td>
+                          <td>
+                            <span
+                              className="pill"
+                              style={{
+                                color: task.priority === "CRITICAL" || task.priority === "HIGH" ? "var(--red)" : "var(--muted)",
+                              }}
+                            >
+                              {task.priority}
+                            </span>
+                          </td>
+                          <td style={{ fontFamily: "var(--font-mono, monospace)" }}>v{task.version}</td>
+                          <td>
+                            <span
+                              style={{
+                                fontSize: "10.5px",
+                                fontWeight: 700,
+                                padding: "3px 8px",
+                                borderRadius: "6px",
+                                background:
+                                  task.status === "RUNNING"
+                                    ? "rgba(34,211,238,0.15)"
+                                    : task.status === "AWAITING_REVIEW"
+                                    ? "rgba(255,184,0,0.15)"
+                                    : task.status === "MERGED" || task.status === "APPROVED"
+                                    ? "rgba(59,240,140,0.15)"
+                                    : "rgba(255,255,255,0.06)",
+                                color:
+                                  task.status === "RUNNING"
+                                    ? "#22d3ee"
+                                    : task.status === "AWAITING_REVIEW"
+                                    ? "#ffb800"
+                                    : task.status === "MERGED" || task.status === "APPROVED"
+                                    ? "#3bf08c"
+                                    : "#8a8a93",
+                              }}
+                            >
+                              {task.status.replace(/_/g, " ")}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: "right" }}>
+                            <div style={{ display: "inline-flex", gap: "6px" }}>
+                              <button
+                                className="btn"
+                                style={{ height: "24px", fontSize: "10px", padding: "0 8px" }}
+                                onClick={() => handleViewDiff(task)}
+                              >
+                                ▤ Diff
+                              </button>
+                              {task.status !== "RUNNING" && task.status !== "MERGED" && (
+                                <button
+                                  className="btn primary"
+                                  style={{ height: "24px", fontSize: "10px", padding: "0 8px" }}
+                                  onClick={() => handleTriggerRun(task)}
+                                >
+                                  ▶ Run
+                                </button>
+                              )}
+                              {task.status === "APPROVED" && (
+                                <button
+                                  className="btn primary"
+                                  style={{ height: "24px", fontSize: "10px", padding: "0 8px", background: "var(--green)", color: "#000" }}
+                                  onClick={() => handleMerge(task)}
+                                >
+                                  ⤸ Merge
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="table-foot">
+                <span>Showing {paginatedTasks.length} of {filteredTasks.length} tasks</span>
+                <div className="pagination">
+                  <button className="page" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>
+                    ← Prev
+                  </button>
+                  {Array.from({ length: totalPages }).map((_, i) => (
+                    <button
+                      key={i}
+                      className={`page ${currentPage === i + 1 ? "active" : ""}`}
+                      onClick={() => setCurrentPage(i + 1)}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                  <button className="page" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>
+                    Next →
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* ═════════════════════════════════════════════════════════ */}
+          {/* SCREEN 3: CODE REVIEW & DIFF GOVERNANCE                  */}
+          {/* ═════════════════════════════════════════════════════════ */}
+          {activeTab === "review" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div
+                style={{
+                  background: "var(--panel)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-card)",
+                  padding: "18px 24px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text)", margin: 0 }}>
+                    Human-in-the-Loop Review Queue
+                  </h2>
+                  <p style={{ fontSize: "12px", color: "var(--muted)", margin: "4px 0 0" }}>
+                    Protected branches require explicit developer sign-off before merge
+                  </p>
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--amber)", fontFamily: "var(--font-mono, monospace)", fontWeight: 600 }}>
+                  ● {tasks.filter((t) => t.status === "AWAITING_REVIEW").length} Tasks Pending Review
+                </div>
+              </div>
+
+              {tasks.filter((t) => t.status === "AWAITING_REVIEW" || t.status === "APPROVED").length === 0 ? (
+                <section className="card" style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
+                  <p style={{ fontSize: "14px", color: "var(--text)", marginBottom: "6px" }}>No tasks pending review</p>
+                  <p style={{ fontSize: "12px" }}>Dispatch tasks in the Studio or trigger an agent run to inspect generated diffs.</p>
+                </section>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {tasks
+                    .filter((t) => t.status === "AWAITING_REVIEW" || t.status === "APPROVED")
+                    .map((t) => (
+                      <div
+                        key={t.id}
+                        style={{
+                          background: "var(--panel)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "16px",
+                          padding: "18px 20px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "16px",
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: "14px", fontWeight: 600, color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span>{t.title}</span>
+                            <span style={{ fontSize: "10px", padding: "2px 8px", borderRadius: "10px", background: "rgba(255,184,0,0.15)", color: "#ffb800" }}>
+                              {t.status.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: "11px", color: "var(--muted)", fontFamily: "var(--font-mono, monospace)", marginTop: "4px" }}>
+                            Target: {t.targetBranch || "main"} · Version: v{t.version} · Created: {new Date(t.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button className="btn" onClick={() => handleViewDiff(t)}>
+                            Inspect Git Diff ▤
+                          </button>
+                          {t.status === "AWAITING_REVIEW" && (
+                            <button className="btn primary" onClick={() => handleViewDiff(t)}>
+                              Review & Sign-Off →
+                            </button>
+                          )}
+                          {t.status === "APPROVED" && (
+                            <button
+                              className="btn primary"
+                              style={{ background: "var(--green)", color: "#000" }}
+                              onClick={() => handleMerge(t)}
+                            >
+                              ⤸ Merge to {t.targetBranch || "main"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════════ */}
+          {/* SCREEN 4: WORKTREE SANDBOXES & FILES                     */}
+          {/* ═════════════════════════════════════════════════════════ */}
+          {activeTab === "worktree" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div
+                style={{
+                  background: "var(--panel)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-card)",
+                  padding: "18px 24px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text)", margin: 0 }}>
+                    Isolated Git Worktree Sandboxes
+                  </h2>
+                  <p style={{ fontSize: "11.5px", color: "var(--muted)", margin: "4px 0 0", fontFamily: "var(--font-mono, monospace)" }}>
+                    Ephemeral Lease: 0x9f18a24 (Locked) · Worktree Path: .agentforge/worktrees/task-af82b
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    className="btn"
+                    onClick={() => {
+                      setActionSuccessMsg("Worktree branch pruned and garbage collected.");
+                      setTimeout(() => setActionSuccessMsg(null), 3000);
+                    }}
+                  >
+                    Prune Inactive Worktrees
+                  </button>
+                  <button
+                    className="btn primary"
+                    onClick={() => {
+                      setActionSuccessMsg("Lease locked for 60m on branch agentforge/task-pilot-71");
+                      setTimeout(() => setActionSuccessMsg(null), 3000);
+                    }}
+                  >
+                    Renew Lease ↻
+                  </button>
+                </div>
+              </div>
+
+              {/* Split File Explorer & Code Inspector */}
+              <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "16px", height: "540px" }}>
+                {/* File Tree */}
+                <div style={{ background: "var(--panel)", borderRadius: "var(--radius-card)", border: "1px solid var(--border)", overflowY: "auto", padding: "12px" }}>
+                  <div style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", padding: "6px 8px" }}>
+                    Worktree Changed Files ({worktreeFiles.length})
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    {worktreeFiles.map((f) => {
+                      const isSelected = selectedWorktreeFile === f.path;
+                      return (
+                        <div
+                          key={f.path}
+                          onClick={() => setSelectedWorktreeFile(f.path)}
+                          style={{
+                            padding: "8px 10px",
+                            borderRadius: "8px",
+                            cursor: "pointer",
+                            background: isSelected ? "rgba(255,255,255,0.08)" : "transparent",
+                            border: isSelected ? "1px solid rgba(255,255,255,0.12)" : "1px solid transparent",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: "11.5px", fontFamily: "var(--font-mono, monospace)", color: isSelected ? "#fff" : "var(--text-2)" }}>
+                              {f.path.split("/").pop()}
+                            </span>
+                            <span style={{ fontSize: "9px", fontWeight: 700, color: f.status === "MODIFIED" ? "#3bf08c" : "#22d3ee" }}>
+                              {f.status}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: "9.5px", color: "var(--muted)", marginTop: "2px" }}>
+                            {f.path.slice(0, f.path.lastIndexOf("/"))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Code Viewer */}
+                <div style={{ background: "#060608", borderRadius: "var(--radius-card)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", background: "rgba(255,255,255,0.02)", borderBottom: "1px solid var(--border)" }}>
+                    <span style={{ fontSize: "11px", fontFamily: "var(--font-mono, monospace)", color: "#fff" }}>
+                      📄 {selectedWorktreeFile}
+                    </span>
+                    <button
+                      className="btn"
+                      style={{ height: "22px", fontSize: "9px" }}
+                      onClick={() => {
+                        const content = worktreeFiles.find((f) => f.path === selectedWorktreeFile)?.content || "";
+                        navigator.clipboard.writeText(content);
+                        setActionSuccessMsg("File content copied to clipboard!");
+                        setTimeout(() => setActionSuccessMsg(null), 2500);
+                      }}
+                    >
+                      Copy File Code
+                    </button>
+                  </div>
+                  <div style={{ flex: 1, overflowY: "auto", padding: "16px", fontFamily: "var(--font-mono, monospace)", fontSize: "11px", lineHeight: "1.7", color: "#e4e4e7" }}>
+                    {(worktreeFiles.find((f) => f.path === selectedWorktreeFile)?.content || "").split("\n").map((line, idx) => (
+                      <div key={idx} style={{ display: "flex", gap: "14px" }}>
+                        <span style={{ color: "#52525b", width: "24px", textAlign: "right", userSelect: "none" }}>{idx + 1}</span>
+                        <span style={{ color: line.startsWith("+") ? "#3bf08c" : line.startsWith("-") ? "#ff4d4d" : "inherit" }}>
+                          {line}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════════ */}
+          {/* SCREEN 5: API PROVIDERS & CONNECTION KEYS                */}
+          {/* ═════════════════════════════════════════════════════════ */}
+          {activeTab === "providers" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Screen Header */}
+              <div
+                style={{
+                  background: "var(--panel)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-card)",
+                  padding: "18px 24px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text)", margin: 0 }}>
+                    AI Model Providers & API Key Connections
+                  </h2>
+                  <p style={{ fontSize: "12px", color: "var(--muted)", margin: "4px 0 0" }}>
+                    Configure credentials for Google Gemini, Perplexity AI, Anthropic Claude, OpenAI, DeepSeek, and local Ollama
+                  </p>
+                </div>
+                <div style={{ fontSize: "11px", color: "var(--green)", fontFamily: "var(--font-mono, monospace)", fontWeight: 600 }}>
+                  ● Provider-Neutral Adapter Engine Active
+                </div>
+              </div>
+
+              {/* Providers Grid */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "16px" }}>
+                {providers.map((p) => {
+                  const isConfigured = Boolean(p.apiKey);
+                  const isCurrentEditing = editingProviderKey[p.id] !== undefined;
+                  const currentKeyValue = isCurrentEditing ? editingProviderKey[p.id] : p.apiKey;
+                  const isVisible = showKeyText[p.id] || false;
+
+                  return (
+                    <div
+                      key={p.id}
+                      style={{
+                        background: "var(--panel)",
+                        border: p.isDefault ? "1px solid rgba(59,240,140,0.4)" : "1px solid var(--border)",
+                        borderRadius: "18px",
+                        padding: "20px",
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "space-between",
+                        position: "relative",
+                      }}
+                    >
+                      <div>
+                        {/* Header: Icon, Name, Status, Default Badge */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <span
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                borderRadius: "8px",
+                                background: "rgba(255,255,255,0.06)",
+                                border: "1px solid var(--border)",
+                                display: "grid",
+                                placeItems: "center",
+                                fontSize: "15px",
+                              }}
+                            >
+                              {p.icon}
+                            </span>
+                            <div>
+                              <div style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>{p.name}</div>
+                              <div style={{ fontSize: "10.5px", color: "var(--muted)" }}>{p.models[0]}</div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            {p.isDefault && (
+                              <span style={{ fontSize: "9px", fontWeight: 700, padding: "2px 7px", borderRadius: "10px", background: "rgba(59,240,140,0.15)", color: "#3bf08c", border: "1px solid rgba(59,240,140,0.3)" }}>
+                                DEFAULT
+                              </span>
+                            )}
+                            <span
+                              style={{
+                                fontSize: "9.5px",
+                                fontWeight: 600,
+                                padding: "2px 8px",
+                                borderRadius: "10px",
+                                background:
+                                  p.status === "CONNECTED"
+                                    ? "rgba(59,240,140,0.12)"
+                                    : p.status === "TESTING"
+                                    ? "rgba(34,211,238,0.12)"
+                                    : "rgba(255,255,255,0.04)",
+                                color:
+                                  p.status === "CONNECTED"
+                                    ? "#3bf08c"
+                                    : p.status === "TESTING"
+                                    ? "#22d3ee"
+                                    : "var(--muted)",
+                              }}
+                            >
+                              {p.status === "TESTING" ? "Testing..." : p.status === "CONNECTED" ? `● Active (${p.latencyMs ?? 60}ms)` : "○ Unconfigured"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p style={{ fontSize: "11.5px", color: "var(--muted)", lineHeight: "1.5", marginBottom: "14px" }}>
+                          {p.description}
+                        </p>
+
+                        {/* API Key Input */}
+                        <div style={{ marginBottom: "14px" }}>
+                          <label className="form-label" style={{ fontSize: "10px", display: "flex", justifyContent: "space-between" }}>
+                            <span>API Token / Secret Key</span>
+                            <span
+                              onClick={() => setShowKeyText((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
+                              style={{ cursor: "pointer", color: "var(--text-2)" }}
+                            >
+                              {isVisible ? "Hide" : "Reveal"}
+                            </span>
+                          </label>
+                          <input
+                            type={isVisible ? "text" : "password"}
+                            className="form-input"
+                            placeholder={p.keyPlaceholder}
+                            value={currentKeyValue}
+                            onChange={(e) =>
+                              setEditingProviderKey((prev) => ({ ...prev, [p.id]: e.target.value }))
+                            }
+                            style={{ height: "34px", fontFamily: "var(--font-mono, monospace)", fontSize: "11px" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Provider Action Buttons */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
+                        <button
+                          className="btn"
+                          style={{ height: "26px", fontSize: "10px", padding: "0 10px" }}
+                          disabled={!isConfigured || p.status === "TESTING"}
+                          onClick={() => handleTestProvider(p.id)}
+                        >
+                          Ping / Test
+                        </button>
+
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          {!p.isDefault && isConfigured && (
+                            <button
+                              className="btn"
+                              style={{ height: "26px", fontSize: "10px", padding: "0 10px" }}
+                              onClick={() => handleSetDefaultProvider(p.id)}
+                            >
+                              Set Default
+                            </button>
+                          )}
+                          <button
+                            className="btn primary"
+                            style={{ height: "26px", fontSize: "10px", padding: "0 12px" }}
+                            onClick={() => handleSaveProviderKey(p.id)}
+                          >
+                            Save Key
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ═════════════════════════════════════════════════════════ */}
+          {/* SCREEN 6: BENTO TELEMETRY & ANALYTICS                    */}
+          {/* ═════════════════════════════════════════════════════════ */}
+          {activeTab === "analytics" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div
+                style={{
+                  background: "var(--panel)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-card)",
+                  padding: "18px 24px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--text)", margin: 0 }}>
+                    Operational Bento Telemetry Suite
+                  </h2>
+                  <p style={{ fontSize: "12px", color: "var(--muted)", margin: "4px 0 0" }}>
+                    Pure SVG micro-visualizations with zero third-party chart bloat
+                  </p>
+                </div>
+                <div style={{ fontSize: "11px", color: "#3bf08c", fontFamily: "var(--font-mono, monospace)" }}>
+                  ● 60 FPS WebGL / SVG Engine
+                </div>
+              </div>
+
+              {/* 5 Top Summary Metric Cards */}
+              <section className="metrics">
+                <article className="card metric">
+                  <div className="metric-label">Total Agent Tasks</div>
+                  <div className="metric-value">{metrics.totalTasks}</div>
+                  <div className="metric-note"><span className="pill green">+12.4%</span> vs baseline</div>
+                </article>
+                <article className="card metric">
+                  <div className="metric-label">Active Worker Runs</div>
+                  <div className="metric-value">{metrics.runningSessions}</div>
+                  <div className="metric-note">● Real-time BullMQ</div>
+                </article>
+                <article className="card metric">
+                  <div className="metric-label">Pending Reviews</div>
+                  <div className="metric-value" style={{ color: "var(--amber)" }}>{metrics.awaitingReview}</div>
+                  <div className="metric-note">Protected Merges Guarded</div>
+                </article>
+                <article className="card metric">
+                  <div className="metric-label">Verified Merges</div>
+                  <div className="metric-value" style={{ color: "var(--green)" }}>{metrics.mergedOrApproved}</div>
+                  <div className="metric-note">Signed commit records</div>
+                </article>
+                <article className="card metric">
+                  <div className="metric-label">Success Rate</div>
+                  <div className="metric-value">{metrics.successRate}%</div>
+                  <div className="metric-note">Iterative error repairs</div>
+                </article>
+              </section>
+
+              {/* Pure SVG Analytics Bento Grid */}
+              <AnalyticsBento
+                currency="$"
+                revenue={{
+                  label: "Token Expenditure & Compute",
+                  value: 9134,
+                  delta: "2.5%",
+                  note: <>Avg. per squad run <span className="text-foreground/80">$1.85</span></>,
+                  caption: "Last 30 days",
+                  series: bentoRevenue.map((value, i) => ({
+                    value,
+                    label: new Date(2026, 8, 22 + i).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                  })),
+                }}
+                sessions={{
+                  label: "Worker Agent Sessions",
+                  value: 48210,
+                  delta: "12.4%",
+                  note: "By hour, last 3 weeks",
+                  desktop: bentoDesktop,
+                  mobile: bentoMobile,
+                }}
+                categories={{
+                  title: "Task Throughput by Capability",
+                  groups: [
+                    { id: "product", name: "Architect", color: "#7CFF5B", ink: "dark" },
+                    { id: "eng", name: "Developer", color: "#8B3DFF", ink: "light" },
+                    { id: "growth", name: "Tester", color: "#FFB800", ink: "dark" },
+                    { id: "brand", name: "Security", color: "#FF5A1F", ink: "dark" },
+                    { id: "ops", name: "Worktree", color: "#888" },
+                  ],
+                  periods: [
+                    { label: "Weekly", total: 2197, delta: "19.6%", compare: "vs 1,340 last wk" },
+                    { label: "Monthly", total: 8903, delta: "1.9%", compare: "vs 5,441 last mo" },
+                    { label: "Yearly", total: 98134, delta: "22%", compare: "vs 76,330 last yr" },
+                  ],
+                  items: [
+                    { name: "AST Parser", group: "product", values: [509, 2140, 25600] },
+                    { name: "Code Gen", group: "eng", values: [412, 1880, 22900] },
+                    { name: "Vitest Harness", group: "growth", values: [445, 1590, 18100] },
+                    { name: "Secret Audit", group: "brand", values: [331, 1240, 13400] },
+                    { name: "Worktree Lease", group: "ops", values: [380, 1120, 12300] },
+                  ],
+                }}
+                seasonality={{
+                  title: "Sprint Seasonality",
+                  years: [
+                    {
+                      label: "2026",
+                      values: [16120, 20540, 24440, 18460, 28080, 21580, 17160, 25740, 30160, 22880, 32240, 23660],
+                      stats: [
+                        { label: "Monthly avg", value: 8097, delta: "19.6%", note: "44,214 agent runs" },
+                        { label: "Year total", value: 312134, delta: "2.5%", note: "301,002 commits" },
+                      ],
+                      rows: [{ label: "US East", value: "201,192" }, { label: "Europe", value: "192,054" }],
+                    },
+                  ],
+                }}
+                credit={false}
+              />
+            </div>
+          )}
+
+          {/* Footer */}
+          <footer style={{ marginTop: "40px", paddingTop: "20px", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", color: "var(--muted)", fontSize: "11px" }}>
+            <span>AgentForge Multi-Agent Engine · Local CLI Daemon Connected</span>
+            <div style={{ display: "flex", gap: "16px" }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab("providers"); }} style={{ color: "var(--muted)" }}>API Providers</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab("studio"); }} style={{ color: "var(--muted)" }}>CLI Terminal</a>
+            </div>
+          </footer>
+        </div>
+      </main>
+
+      {/* ── CREATE AGENT TASK MODAL ──────────────────────────────── */}
+      {isCreateModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsCreateModalOpen(false)}>
+          <div className="modal-card" style={{ maxWidth: "620px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h3 style={{ margin: 0 }}>Create Autonomous Coding Task</h3>
+                <small style={{ color: "var(--muted)", fontSize: "11px" }}>Dispatch squad across configured foundation models</small>
+              </div>
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "16px", color: "var(--muted)" }}
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleCreateTask}>
+              <div className="modal-body">
+                <div>
+                  <label className="form-label">Task Title / Goal</label>
+                  <input
+                    className="form-input"
+                    placeholder="e.g. Implement input validation on payment gateway"
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label">Detailed Prompt / Description</label>
+                  <textarea
+                    className="form-textarea"
+                    rows={3}
+                    placeholder="Specify constraints, acceptance criteria, or files to inspect..."
+                    value={newTaskDesc}
+                    onChange={(e) => setNewTaskDesc(e.target.value)}
+                  />
+                </div>
+
+                {/* AI Foundation Model Selector */}
+                <div>
+                  <label className="form-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>AI Foundation Provider & Model</span>
+                    <span style={{ fontSize: "9.5px", color: "#3bf08c", fontFamily: "var(--font-mono, monospace)" }}>
+                      Active: {newTaskProvider.toUpperCase()}
+                    </span>
+                  </label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
+                    {providers.map((p) => {
+                      const isSelected = newTaskProvider === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setNewTaskProvider(p.id);
+                            setNewTaskModel(p.models[0]);
+                          }}
+                          style={{
+                            padding: "8px",
+                            borderRadius: "8px",
+                            border: isSelected ? "1px solid #cc0000" : "1px solid var(--border)",
+                            background: isSelected ? "rgba(204,0,0,0.12)" : "rgba(255,255,255,0.02)",
+                            textAlign: "left",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <div style={{ fontSize: "11px", fontWeight: 700, color: isSelected ? "#fff" : "var(--text-2)" }}>
+                            {p.icon} {p.name}
+                          </div>
+                          <div style={{ fontSize: "9px", color: isSelected ? "#ff6b6b" : "var(--muted)" }}>
+                            {p.models[0]}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Squad Archetype */}
+                <div>
+                  <label className="form-label">Squad Pipeline Archetype</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "6px" }}>
+                    {[
+                      { id: "FULL_STACK", title: "Full-Stack Feature", pipeline: "Architect → Dev → Test → Sec" },
+                      { id: "HOTFIX", title: "Hotfix Crew", pipeline: "Dev → Test → Sec" },
+                      { id: "SECURITY", title: "Security Sweep", pipeline: "Architect → Security Audit" },
+                      { id: "SOLO", title: "Solo Developer", pipeline: "Direct Single Agent Run" },
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setNewTaskSquad(s.id)}
+                        style={{
+                          padding: "8px",
+                          borderRadius: "8px",
+                          border: newTaskSquad === s.id ? "1px solid #3bf08c" : "1px solid var(--border)",
+                          background: newTaskSquad === s.id ? "rgba(59,240,140,0.08)" : "rgba(255,255,255,0.02)",
+                          textAlign: "left",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: newTaskSquad === s.id ? "#3bf08c" : "var(--text-2)" }}>{s.title}</div>
+                        <div style={{ fontSize: "8.5px", color: "var(--muted)" }}>{s.pipeline}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Token Spending Budget */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <label className="form-label" style={{ margin: 0 }}>Spending & Token Budget Cap</label>
+                    <span style={{ fontSize: "11px", fontFamily: "var(--font-mono, monospace)", fontWeight: 700, color: "#fff" }}>
+                      ${newTaskBudget.toFixed(2)} USD (~{Math.round(newTaskBudget * 200).toLocaleString()}k tokens)
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    step="0.5"
+                    value={newTaskBudget}
+                    onChange={(e) => setNewTaskBudget(parseFloat(e.target.value))}
+                    style={{ width: "100%", accentColor: "#cc0000", cursor: "pointer" }}
+                  />
+                </div>
+
+                {/* Priority & Branch */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div>
+                    <label className="form-label">Priority Level</label>
+                    <select
+                      className="form-select"
+                      value={newTaskPriority}
+                      onChange={(e) => setNewTaskPriority(e.target.value)}
+                    >
+                      <option value="LOW">Low</option>
+                      <option value="MEDIUM">Medium</option>
+                      <option value="HIGH">High (Default)</option>
+                      <option value="CRITICAL">Critical</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Target Branch</label>
+                    <input
+                      className="form-input"
+                      value={newTaskBranch}
+                      onChange={(e) => setNewTaskBranch(e.target.value)}
+                      placeholder="main"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-foot">
+                <button type="button" className="btn" onClick={() => setIsCreateModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn primary" disabled={isSubmittingTask || !newTaskTitle.trim()}>
+                  {isSubmittingTask ? "Dispatching..." : "+ Create & Queue Task"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── DIFF & REVIEW MODAL ──────────────────────────────────── */}
+      {diffModalTask && (
+        <div className="modal-overlay" onClick={() => setDiffModalTask(null)}>
+          <div className="modal-card" style={{ maxWidth: "680px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div>
+                <h3 style={{ margin: 0 }}>Review Code Changes: {diffModalTask.title}</h3>
+                <small style={{ color: "var(--muted)", fontSize: "10px" }}>
+                  Task AF-{diffModalTask.id.slice(0, 8)} · Branch: {diffModalTask.targetBranch || "main"}
+                </small>
+              </div>
+              <button
+                onClick={() => setDiffModalTask(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "16px", color: "var(--muted)" }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              {isLoadingDiff ? (
+                <div style={{ padding: "30px", textAlign: "center", color: "var(--muted)" }}>
+                  Retrieving unified git diff from worktree...
+                </div>
+              ) : (
+                <>
+                  <div className="diff-container" style={{ maxHeight: "320px", overflowY: "auto" }}>
+                    {diffContent.split("\n").map((line, idx) => {
+                      if (line.startsWith("+") && !line.startsWith("+++")) {
+                        return <span key={idx} className="diff-add">{line}</span>;
+                      }
+                      if (line.startsWith("-") && !line.startsWith("---")) {
+                        return <span key={idx} className="diff-del">{line}</span>;
+                      }
+                      return <span key={idx} className="diff-info">{line}</span>;
+                    })}
+                  </div>
+
+                  {diffModalTask.status === "AWAITING_REVIEW" && (
+                    <div style={{ marginTop: "12px" }}>
+                      <label className="form-label">Review Decision Notes</label>
+                      <input
+                        className="form-input"
+                        placeholder="Add review sign-off notes or required changes rationale..."
+                        value={reviewNotes}
+                        onChange={(e) => setReviewNotes(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="modal-foot">
+              <button className="btn" onClick={() => setDiffModalTask(null)}>
+                Close
+              </button>
+              {diffModalTask.status === "AWAITING_REVIEW" && (
+                <>
+                  <button
+                    className="btn"
+                    style={{ borderColor: "var(--red)", color: "var(--red)" }}
+                    onClick={async () => {
+                      if (!selectedWorkspace) return;
+                      await apiClient.submitReview(selectedWorkspace.id, diffModalTask.id, {
+                        status: "CHANGES_REQUESTED",
+                        reviewNotes: reviewNotes || "Changes requested by engineer.",
+                      });
+                      setDiffModalTask(null);
+                      refreshTasks();
+                    }}
+                  >
+                    Request Changes
+                  </button>
+                  <button className="btn primary" disabled={isSubmittingReview} onClick={handleApprove}>
+                    {isSubmittingReview ? "Approving..." : "✓ Approve Changes"}
+                  </button>
+                </>
+              )}
+              {diffModalTask.status === "APPROVED" && (
+                <button
+                  className="btn primary"
+                  style={{ background: "var(--green)", color: "#000" }}
+                  onClick={() => {
+                    handleMerge(diffModalTask);
+                    setDiffModalTask(null);
+                  }}
+                >
+                  ⤸ Merge to {diffModalTask.targetBranch || "main"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

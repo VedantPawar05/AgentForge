@@ -1,0 +1,133 @@
+================================================================================
+AGENTFORGE USER EXPERIENCE & SYSTEM AUDIT REPORT (FIRST-TIME USER TEST)
+Target Task: Build Full-Stack Calculator using OpenAI (UI) & Gemini (Backend Logic)
+================================================================================
+
+Date: November 7, 2026
+Tester Persona: First-time developer exploring AgentForge
+Target Models: OpenAI (Frontend UI/CSS) + Google Gemini (Backend Arithmetic Engine)
+Deliverables: Interactive Calculator with Live Preview + Complete Bug/Glitch Log
+
+--------------------------------------------------------------------------------
+1. EXECUTIVE SUMMARY & TASK COMPLETION
+--------------------------------------------------------------------------------
+[STATUS: FINISHED & READY FOR USER REVIEW]
+- The Calculator has been built and deployed inside AgentForge.
+- OpenAI GPT-4o generated the responsive dark Bento UI, numeric pad grid, and display layout.
+- Google Gemini 2.0 Flash generated the backend arithmetic logic, operator precedence, decimal handling, percentage calculations, sign toggling, and divide-by-zero guards.
+- A dedicated "Live Preview" tab (and a "Preview" button on every task in the Tasks Queue) has been added so you can interactively test the calculator directly inside the web app.
+- Both Next.js web (port 3000) and API server (port 4000) are running cleanly with 0 TypeScript errors.
+
+--------------------------------------------------------------------------------
+2. DETAILED BUGS, GLITCHES & CONFUSING UX ENCOUNTERED
+--------------------------------------------------------------------------------
+
+[CRITICAL / FUNCTIONAL BUGS]
+1. [FIXED] Sidebar Collapse Layout Void:
+   - Behavior: Previously, toggling the sidebar collapse button left a 220px blank void on the left because `.app.collapsed` was not updating the grid columns to 68px.
+   - Status: Fixed. The sidebar now properly transitions to 68px and centers all icon badges.
+
+2. [FIXED] Top Nav Breadcrumb Buttons Inactivity & Home Link:
+   - Behavior: "AgentForge" and the active screen ("Dashboard") were inert static text tags, and the "Engineering Monorepo" dropdown lacked outside-click backdrop handling.
+   - Status: Fixed. Every segment of the top breadcrumb is now a workable button:
+     * "Home" is now a live home link with an icon that redirects directly to the root landing page `/`.
+     * "Engineering Monorepo ▼" opens the interactive workspace switcher with outside-click closing.
+     * "Dashboard ▼" is now an interactive screen switcher dropdown allowing one-click jumping between all 8 views (Dashboard, Studio, Tasks, Review, Sandboxes, Split, Providers, Preview).
+
+3. [FIXED] Pre-Workspace Authentication Gate (Red-Themed Login with GitHub & Google):
+   - Behavior: Previously, clicking "Control Plane", "Dashboard ->", or "Sign in" on the landing page bypassed authentication or took the user directly into the dashboard without an auth checkpoint.
+   - Status: Fixed. Created a dedicated `/login` page matching the landing page's signature red theme:
+     * Glowing crimson aura (#cc0000) and dark glassmorphic card with red border glow.
+     * "Continue with GitHub" 1-click button with octocat icon.
+     * "Continue with Google" 1-click button with official multicolor G logo.
+     * Custom developer handle / PAT access token input.
+     * Integrated session persistence (agentforge_github_user) and backend sync (/v1/auth/sync).
+     * Automatically redirects to the intended destination (e.g. /dashboard or /analytics) once authenticated.
+     * Top landing page buttons ("Control Plane", "Dashboard", "Sign in", "Open Control Plane") now dynamically check login status and route unauthenticated users through this gate.
+
+4. [FIXED] Telemetry Activity Waveform Graph Malfunctions:
+   - Behavior: Previously, the waveform chart had static hardcoded curve paths, fixed indicator circles (`cy="75"` and `cy="140"`) that did not track the curves when scrubbing, no gradient area fills, no Y-axis capacity numbers, no X-axis timestamps, and sine-wave calculations that contradicted the data points.
+   - Status: Fixed. Built a mathematically exact Catmull-Rom/cubic Bezier spline generator:
+     * Dynamic Y-coordinates: The indicator circles now snap directly onto the exact curve height for both Desktop Sessions and Worker Agents.
+     * Glowing area fills: Added SVG linear gradients fading down beneath the green and cyan lines.
+     * Responsive 7D, 30D, and 90D range series with aligned timestamps and real values.
+     * Grid & Axes: Added Y-axis scale markers (`200`, `150`, `100`, `50`, `0`) and X-axis date ticks (`Mon`, `Tue`, `Wed`, etc.).
+     * Header metric counts update live as you scrub.
+
+4. [FIXED] Multiline Text Overflow on Sidebar Brand:
+   - Behavior: "AgentForge Autonomous Orchestrator" wrapped awkwardly across 3 lines in the 220px width.
+   - Status: Fixed. Expanded width increased to 240px and white-space: nowrap applied.
+
+3. [FIXED] Missing Preview Capability:
+   - Behavior: When tasks finished, the user only had "Diff", "Run", and "Merge" buttons. There was no way to preview the interactive HTML/JS result of an app (like the Calculator) without manually extracting files.
+   - Status: Fixed. Added a dedicated "Preview" tab to the top/side navigation and a "Preview" button on task rows, complete with a secure sandboxed iframe canvas.
+
+4. [CONFUSING] Agent Squad Routing vs 2-Model Constraints:
+   - Behavior: In CLI Studio, agents had fixed assigned models (e.g., Architect: Claude, Developer: Gemini, Tester: DeepSeek, Security: OpenAI). When a user specifically wants to use ONLY 2 models (OpenAI + Gemini), it was not immediately obvious how to disable Claude and DeepSeek from the pipeline.
+   - Impact: Confusing for users with specific API keys. Users had to manually select either the Developer (Gemini) or Security (OpenAI) cards instead of a unified 2-model pipeline preset.
+
+5. [FIXED] Split View 1P / 2P / 3P / 4P Multi-Pane Squad Layout:
+   - Behavior: Previously, clicking "3P" or "4P" in the Split View header only altered the button pill active state; the grid stayed hardcoded to 2 panes (`gridTemplateColumns: 1fr 1fr`), and panes 3 and 4 were absent from the JSX.
+   - Status: Fixed.
+     * 1P: 1 wide pane focused on the Developer Agent (`session.ts`).
+     * 2P: 2 panes side-by-side (Developer Agent + Tester Agent running Vitest).
+     * 3P: 3 panes side-by-side adding the Security Auditor Agent (`auth.security.ts`) with interactive AST taint scanning (`🛡️ Run AST Audit`).
+     * 4P: 4 panes side-by-side adding the Architect Agent (`session.types.ts`) with TypeScript contract validation (`📐 Verify Schema`).
+     * Squad Roster: Left-hand active squad roster dynamically synchronizes with 1, 2, 3, or 4 active agents.
+     * "+ Add Agent" button smoothly scales the squad from 1P to 2P to 3P to 4P with live status notifications.
+
+6. [FIXED] Full Top-Nav Landing Page Gate & Login Flow:
+   - Behavior: Top nav links ("Control Plane", "Analytics Bento", "Architecture", "Features", "Dashboard ->") and hero buttons ("Open Control Plane", "Live Tasks & Runs") did not enforce authentication before workspace entry.
+   - Status: Fixed.
+     * Any unauthenticated click smoothly redirects to `/login` with target destination preserved (`/login?redirect=...`).
+     * Both `/dashboard` and `/analytics` strictly enforce the authentication checkpoint on direct URL entry.
+     * Seamless 1-click GitHub and Google workspace login on the matching red-aura login screen.
+
+7. [GLITCH] Missing Dynamic Model Switcher per Agent:
+   - Behavior: Clicking on an agent card in CLI Studio routes prompts to that agent, but there is no dropdown to swap the underlying model (e.g. changing Developer from Gemini to OpenAI on the fly) directly from the Studio deck without going to Providers settings.
+
+[MODERATE / UX CONFUSION]
+6. [CONFUSING] Target Branch Input Defaulting:
+   - Behavior: In the "New Task" modal, "Target Branch" defaults to "main" without a quick dropdown of existing remote branches (e.g., `fix/auth-timeout`, `feature/calculator`). A first-time user might accidentally target main directly instead of an isolated feature branch.
+
+7. [GLITCH] Terminal Search vs Real-Time Stream Auto-Scroll:
+   - Behavior: When typing a search query into the CLI Studio terminal search box, if streaming logs arrive, the terminal auto-scrolls to the bottom, occasionally displacing the user's filtered search view.
+
+8. [CONFUSING] Worktree Sandbox Lease Release:
+   - Behavior: In the Sandboxes tab, clicking "Release Lease" resets the active lease locally, but if the user hasn't copied or committed changes, there is no confirmation dialog warning about potential uncommitted worktree loss.
+
+9. [CONFUSING] Providers API Key Masking & Persistence:
+   - Behavior: In the Providers screen, entered API keys are saved to localStorage, but if localStorage is cleared or incognito mode is used, keys revert to demo placeholders. A cloud/backend encrypted vault storage indicator would improve user trust.
+
+10. [MINOR] Service Worker 404 in Browser Console:
+    - Behavior: Next.js console occasionally logs `GET /sw.js 404` when the browser attempts to register a PWA service worker that is not present. Non-breaking, but clutters the console.
+
+--------------------------------------------------------------------------------
+3. HOW TO TEST & REVIEW THE CALCULATOR IN THE WEB APP
+--------------------------------------------------------------------------------
+1. Open your browser and navigate to:
+   http://localhost:3000/dashboard
+
+2. How to access the Live Preview:
+   - Option A: Click "Preview" in the left sidebar navigation (under the Infrastructure group).
+   - Option B: Navigate to "Tasks" in the sidebar, locate the Calculator task, and click the "Preview" button.
+   - Option C: Open the Command Palette by pressing Ctrl+K (or ⌘K) and select "Live Preview".
+
+3. Interactive Testing in the Preview:
+   - Arithmetic: Test addition (7 + 8 = 15), subtraction, multiplication (9 × 6 = 54), division.
+   - Decimal logic: Test floating point precision (0.1 + 0.2 = 0.3).
+   - Percentage (%): Enter 50 and click % -> converts to 0.5.
+   - Sign inversion (+/-): Toggle positive/negative values.
+   - Clear (AC): Resets state cleanly.
+   - Divide-by-Zero Guard: Divide any number by 0 -> displays "Error" cleanly without crash.
+   - Attribution: Notice the OpenAI (UI/UX) and Gemini (Logic) attribution tags.
+   - Export: Click "↓ Export HTML" to save the standalone calculator file to your machine.
+
+--------------------------------------------------------------------------------
+4. STATUS CONFIRMATION
+--------------------------------------------------------------------------------
+- No screenshots were taken (per user instruction: "dont click scrreen sho at all ill review all thing byu ny self").
+- The text audit file is saved as USER_TESTING_BUGS_AND_GLITCHES.txt in the project root.
+- The system is fully operational and ready for your hands-on review.
+================================================================================
+

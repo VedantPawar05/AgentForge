@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@agentforge/shared": ["./packages/shared/src/index.ts"],
+      "@agentforge/db": ["./packages/db/src/index.ts"],
+      "@agentforge/agent-adapters": ["./packages/agent-adapters/src/index.ts"],
+      "@agentforge/sandbox": ["./packages/sandbox/src/index.ts"],
+      "@agentforge/runner": ["./packages/runner/src/index.ts"]
+    }
+  },
+  "include": ["scripts/**/*"]
+}
+

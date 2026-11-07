@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>AgentForge CLI Studio</title>
+<script src="f830533a-2dae-457a-9b04-e795ac4cf956"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>/* cyrillic-ext */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwRGFWfOw.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwYGFWfOw.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwTGFWfOw.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwSGFWfOw.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("bcba7c26-62b2-4c0a-9a2f-a8ff1b1f459e") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwRGFWfOw.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwYGFWfOw.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwTGFWfOw.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwSGFWfOw.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("bcba7c26-62b2-4c0a-9a2f-a8ff1b1f459e") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwRGFWfOw.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwYGFWfOw.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwTGFWfOw.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwSGFWfOw.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("bcba7c26-62b2-4c0a-9a2f-a8ff1b1f459e") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrodmgPn.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrMdmgPn.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* symbols2 */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("619314d0-0971-49ab-bda3-f4c9564b264e") format('woff2');
+  unicode-range: U+2000-2001, U+2004-2008, U+200A, U+23B8-23BD, U+2500-259F;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrgdmgPn.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrkdmgPn.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("cbb9ed78-aa74-44c0-b2e9-bb195c21d076") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrodmgPn.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrMdmgPn.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* symbols2 */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("619314d0-0971-49ab-bda3-f4c9564b264e") format('woff2');
+  unicode-range: U+2000-2001, U+2004-2008, U+200A, U+23B8-23BD, U+2500-259F;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrgdmgPn.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrkdmgPn.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("cbb9ed78-aa74-44c0-b2e9-bb195c21d076") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+<style>
+body{margin:0;background:#0b0b0d;font-family:'Geist',system-ui,sans-serif;color:#ededf0}
+a{color:inherit;text-decoration:none}
+button,input,textarea{font:inherit;color:inherit}
+.mono{font-family:'Geist Mono',ui-monospace,monospace}
+.card{background:#121216;border:1px solid #23232a;border-radius:24px;padding:24px;box-sizing:border-box}
+.nav{display:flex;align-items:center;gap:12px;padding:0 14px;min-height:44px;border-radius:12px;color:#9a9aa6;font-size:14px;box-sizing:border-box;border:1px solid transparent}
+.nav:hover{color:#ededf0;background:#14141a}
+.nav.on{background:#17171d;color:#ededf0;border-color:#23232a}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid #23232a;color:#9a9aa6;white-space:nowrap}
+.lbl{font-size:12px;color:#9a9aa6;letter-spacing:.06em;text-transform:uppercase}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:14px;border:1px solid #23232a;background:#17171d;font-size:14px;font-weight:500;cursor:pointer;box-sizing:border-box;white-space:nowrap}
+.btn.pri{background:#10b981;border-color:#10b981;color:#04130d;font-weight:600}
+.seg{display:inline-flex;padding:4px;border-radius:999px;background:#0e0e12;border:1px solid #23232a;gap:2px}
+.seg button{border:0;background:transparent;padding:0 14px;min-height:36px;border-radius:999px;font-size:13px;color:#9a9aa6;cursor:pointer}
+.seg button.on{background:#1c1c23;color:#ededf0}
+.ok{color:#34d399}.cy{color:#22d3ee}.am{color:#fbbf24}.vi{color:#a78bfa}.rd{color:#f87171}
+.ln{display:flex;gap:12px;align-items:baseline;line-height:1.7}
+.tag{flex:0 0 92px;font-size:12px}
+.dim{color:#9a9aa6}
+.chip{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:999px;border:1px solid #23232a;background:#121216;font-size:13px;cursor:pointer}
+html body [style*="background:#0b0b0d"],html body [style*="background:#060607"]{background:radial-gradient(760px 520px at 12% 6%,rgba(16,185,129,.30),transparent 65%),radial-gradient(700px 520px at 90% 16%,rgba(6,182,212,.26),transparent 65%),radial-gradient(760px 580px at 55% 98%,rgba(139,92,246,.22),transparent 65%),#0b0b0d!important}
+.card,.pr,.opt,.key,.seg,.chip{-webkit-backdrop-filter:blur(24px) saturate(150%);backdrop-filter:blur(24px) saturate(150%)}
+.card{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 12px 40px rgba(0,0,0,.35)}
+.seg,.pr,.key,.opt,.chip{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.12)}
+.seg button.on{background:rgba(255,255,255,.16)}
+.btn:not(.pri){background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16)}
+.nav.on{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.16)}
+.pill{background:rgba(255,255,255,.05)}
+aside[style]{background:rgba(255,255,255,.035);-webkit-backdrop-filter:blur(28px);backdrop-filter:blur(28px);border-right-color:rgba(255,255,255,.1)!important}
+[style*="#0e0e12"]{background:rgba(255,255,255,.045)!important;border-color:rgba(255,255,255,.1)!important}
+[style*="background:#1c1c23"]{background:rgba(255,255,255,.12)!important}
+[style*="background:#121216"]{background:rgba(255,255,255,.07)!important;-webkit-backdrop-filter:blur(32px) saturate(150%);backdrop-filter:blur(32px) saturate(150%);border-color:rgba(255,255,255,.16)!important}
+</style>
+</helmet>
+<div style="min-height:1000px;display:flex;flex-wrap:wrap;background:#0b0b0d">
+<aside style="flex:1 1 230px;max-width:260px;box-sizing:border-box;padding:24px 16px;border-right:1px solid #23232a;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:12px;padding:4px 14px 20px">
+<div style="width:32px;height:32px;border-radius:10px;background:#10b981;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="#04130d" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"></path></svg></div>
+<span style="font-weight:600;font-size:17px;letter-spacing:-0.01em">AgentForge</span>
+</div>
+<a class="nav on" href="CLI-Studio.dc.html"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"></path></svg>CLI Studio</a>
+<a class="nav" href="Main.dc.html"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="2"></rect><rect x="14" y="3" width="7" height="5" rx="2"></rect><rect x="14" y="12" width="7" height="9" rx="2"></rect><rect x="3" y="16" width="7" height="5" rx="2"></rect></svg>Dashboard</a>
+<a class="nav" href="Tasks.dc.html"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>Tasks</a>
+<a class="nav" href="Code-Review.dc.html"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M6 9v12M13 6h3a2 2 0 0 1 2 2v7"></path></svg>Code Review<span class="pill mono" style="margin-left:auto;padding:2px 8px;color:#fbbf24;border-color:#3a3020">4</span></a>
+<a class="nav" href="Worktree.dc.html"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"></path></svg>Sandboxes</a>
+<a class="nav" href="Multi-Agent.dc.html"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M12 4v16"></path></svg>Split View</a>
+<a class="nav" href="Providers.dc.html"><svg width="18" height="18" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"></circle><path d="M10.8 12.2L20 3M16 7l3 3"></path></svg>Providers</a>
+<div style="flex:1 1 40px"></div>
+<div class="card" style="padding:16px;border-radius:20px;display:flex;flex-direction:column;gap:8px">
+<span class="lbl">Default engine</span>
+<div style="display:flex;align-items:center;gap:8px;font-size:14px"><span style="width:8px;height:8px;border-radius:50%;background:#10b981"></span>Claude 3.7</div>
+<span class="mono" style="font-size:12px;color:#9a9aa6">3 worktrees active</span>
+</div>
+</aside>
+<main style="flex:999 1 560px;min-width:0;box-sizing:border-box;padding:32px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px">
+<div style="display:flex;flex-direction:column;gap:4px">
+<h1 style="margin:0;font-size:28px;font-weight:600;letter-spacing:-0.02em">Agent CLI Studio</h1>
+<p style="margin:0;font-size:14px;color:#9a9aa6">Dispatch a squad and watch each agent work</p>
+</div>
+<a class="btn pri" href="New-Task.dc.html"><svg width="16" height="16" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New Task</a>
+</div>
+
+<div class="card" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 0">
+<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
+<span style="width:36px;height:36px;border-radius:50%;background:#0f2a22;border:1.5px solid #10b981;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" sc-camel-view-box="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>
+<div style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:500">Architect</span><span class="mono dim" style="font-size:11px">done · 0:42</span></div>
+</div>
+<div style="flex:1 1 40px;height:2px;margin:0 16px;background:#10b981;border-radius:2px"></div>
+<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
+<span style="width:36px;height:36px;border-radius:50%;background:#0f2a22;border:1.5px solid #10b981;box-shadow:0 0 0 6px rgba(16,185,129,.16);display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:#10b981"></span></span>
+<div style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:500">Developer</span><span class="mono ok" style="font-size:11px">running · 1:58</span></div>
+</div>
+<div style="flex:1 1 40px;height:2px;margin:0 16px;background:#23232a;border-radius:2px"></div>
+<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
+<span style="width:36px;height:36px;border-radius:50%;background:#0e0e12;border:1.5px solid #2d2d36;display:flex;align-items:center;justify-content:center;font-size:13px;color:#9a9aa6" class="mono">3</span>
+<div style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:500;color:#9a9aa6">Tester</span><span class="mono dim" style="font-size:11px">queued</span></div>
+</div>
+<div style="flex:1 1 40px;height:2px;margin:0 16px;background:#23232a;border-radius:2px"></div>
+<div style="display:flex;align-items:center;gap:12px;flex:0 0 auto">
+<span style="width:36px;height:36px;border-radius:50%;background:#0e0e12;border:1.5px solid #2d2d36;display:flex;align-items:center;justify-content:center;font-size:13px;color:#9a9aa6" class="mono">4</span>
+<div style="display:flex;flex-direction:column"><span style="font-size:14px;font-weight:500;color:#9a9aa6">Security</span><span class="mono dim" style="font-size:11px">queued</span></div>
+</div>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:16px;flex:1 1 auto">
+<div class="card" style="flex:3 1 520px;min-width:0;padding:0;display:flex;flex-direction:column;overflow:hidden">
+<div style="display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid #23232a;background:#0e0e12">
+<span style="width:10px;height:10px;border-radius:50%;background:#2d2d36"></span><span style="width:10px;height:10px;border-radius:50%;background:#2d2d36"></span><span style="width:10px;height:10px;border-radius:50%;background:#2d2d36"></span>
+<span class="mono dim" style="font-size:12px;margin-left:8px">agentforge — wt-9f18a2 / fix/auth-timeout</span>
+</div>
+<div class="mono" style="padding:20px;font-size:13px;display:flex;flex-direction:column;flex:1 1 auto;min-height:420px">
+<div class="ln"><span class="ok">$</span><span>agentforge run "Fix auth timeout on token refresh"</span></div>
+<div class="ln"><span class="tag cy">[Architect]</span><span class="dim">Reading src/auth/session.ts, src/api/refresh.ts</span></div>
+<div class="ln"><span class="tag cy">[Architect]</span><span>Plan: 3 files touched, API contract unchanged</span></div>
+<div class="ln"><span class="tag cy">[Architect]</span><span class="ok">Plan approved — handing off to Developer</span></div>
+<div class="ln"><span class="tag ok">[Developer]</span><span class="dim">git worktree add .agentforge/wt-9f18a2 -b fix/auth-timeout</span></div>
+<div class="ln"><span class="tag ok">[Developer]</span><span>edit src/auth/session.ts <span class="ok">+18</span> <span class="rd">−6</span></span></div>
+<div class="ln"><span class="tag ok">[Developer]</span><span>edit src/api/refresh.ts <span class="ok">+4</span> <span class="rd">−1</span></span></div>
+<div class="ln"><span class="tag ok">[Developer]</span><span class="dim">npm run build</span></div>
+<div class="ln"><span class="tag ok">[Developer]</span><span class="ok">build succeeded in 2.1s</span></div>
+<div class="ln"><span class="tag am">[Tester]</span><span class="dim">waiting for Developer to finish…</span></div>
+<div class="ln" style="margin-top:6px"><span class="ok">▍</span></div>
+</div>
+</div>
+
+<div style="flex:1 1 260px;min-width:0;display:flex;flex-direction:column;gap:16px">
+<div class="card" style="display:flex;flex-direction:column;gap:14px">
+<span class="lbl">Run details</span>
+<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px"><span class="dim">Model</span><span>Claude 3.7</span></div>
+<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px"><span class="dim">Squad</span><span>Full-Stack Feature</span></div>
+<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px"><span class="dim">Lease</span><span class="mono">0x9f18a24…</span></div>
+<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px"><span class="dim">Elapsed</span><span class="mono">2:40</span></div>
+</div>
+<div class="card" style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span class="lbl">Budget</span><span class="mono" style="font-size:13px">$1.84 / $4.00</span></div>
+<div style="height:8px;border-radius:999px;background:#1c1c23"><div style="width:46%;height:100%;border-radius:999px;background:#10b981"></div></div>
+<span class="mono dim" style="font-size:12px">~368k of 800k tokens</span>
+</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;flex-wrap:wrap;gap:10px">
+<button class="chip"><svg width="16" height="16" sc-camel-view-box="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"></path></svg>Fix Auth Timeout</button>
+<button class="chip"><svg width="16" height="16" sc-camel-view-box="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6L4 19a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-6-10V3"></path></svg>Run All Tests</button>
+<button class="chip"><svg width="16" height="16" sc-camel-view-box="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"></path></svg>Security Audit</button>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:8px 8px 8px 20px;border-radius:20px;background:#121216;border:1px solid #23232a">
+<span class="mono ok" style="font-size:14px">agentforge run</span>
+<label for="cmd" style="position:absolute;left:-9999px">Task command</label>
+<input id="cmd" class="mono" type="text" placeholder="&quot;describe what the squad should do&quot;" style="flex:1;min-width:0;min-height:44px;background:transparent;border:0;outline:0;font-size:14px">
+<span class="pill mono" style="font-size:11px">Enter ↵</span>
+<button class="btn pri" style="border-radius:14px"><svg width="16" height="16" sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>Dispatch</button>
+</div>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000}}">
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+
+
+</body></html>

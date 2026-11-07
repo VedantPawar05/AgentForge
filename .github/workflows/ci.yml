@@ -1,0 +1,89 @@
+name: AgentForge CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Lint, Typecheck & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate --workspace=@agentforge/db
+
+      - name: Typecheck Monorepo
+        run: npm run typecheck
+
+      - name: Run Test Suites
+        run: npm run test
+
+  build-containers:
+    name: Build & Verify Docker Images
+    needs: [verify]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build API Container
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          push: false
+          tags: agentforge-api:latest
+
+      - name: Build Worker Container
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/worker/Dockerfile
+          push: false
+          tags: agentforge-worker:latest
+
+      - name: Build Web Container
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          push: false
+          tags: agentforge-web:latest
+
+  staging-deploy:
+    name: Deploy to Staging & Run Smoke Tests
+    needs: [build-containers]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run End-to-End Staging Smoke Tests
+        run: npm run test:smoke

@@ -1,0 +1,35 @@
+{
+  "name": "agentforge-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Production-minded multi-tenant SaaS platform orchestrating autonomous AI coding agents",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:smoke": "vitest run scripts/smoke-test.test.ts",
+    "test:e2e": "vitest run scripts/e2e-workflow.test.ts",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\" --ignore-path .gitignore",
+    "format:write": "prettier --write \"**/*.{ts,tsx,json,md}\" --ignore-path .gitignore"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "eslint": "^10.14.0",
+    "prettier": "^3.4.1",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^2.1.6"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

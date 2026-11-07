@@ -1,0 +1,420 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  REVIEWER
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum RepositoryProvider {
+  GITHUB
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TaskStatus {
+  QUEUED
+  PROVISIONING
+  RUNNING
+  TESTING
+  AWAITING_REVIEW
+  APPROVED
+  MERGED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+  CHANGES_REQUESTED
+}
+
+enum RunStatus {
+  PENDING
+  ALLOCATED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+}
+
+enum RunEventType {
+  LOG
+  STATUS_CHANGE
+  TOOL_CALL
+  TEST_RESULT
+  METRIC
+}
+
+enum ArtifactType {
+  DIFF
+  LOG_ARCHIVE
+  TEST_REPORT
+  AST_GRAPH
+}
+
+enum ApprovalStatus {
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+enum RunnerStatus {
+  ONLINE
+  OFFLINE
+  BUSY
+}
+
+model User {
+  id           String        @id @default(uuid()) @db.Uuid
+  externalId   String        @unique @map("external_id")
+  email        String        @unique
+  fullName     String?       @map("full_name")
+  avatarUrl    String?       @map("avatar_url")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  workspaces   Workspace[]   @relation("WorkspaceOwner")
+  memberships  Membership[]
+  tasks        Task[]        @relation("TaskCreator")
+  approvals    Approval[]    @relation("TaskApprover")
+  auditLogs    AuditLog[]    @relation("AuditActor")
+  invitations  Invitation[]  @relation("InvitationSender")
+
+  @@map("users")
+}
+
+model Workspace {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String        @unique
+  ownerId      String        @map("owner_id") @db.Uuid
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  owner        User          @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  settings     WorkspaceSetting?
+  memberships  Membership[]
+  invitations  Invitation[]
+  installations RepositoryInstallation[]
+  projects     Project[]
+  tasks        Task[]
+  runs         Run[]
+  artifacts    Artifact[]
+  approvals    Approval[]
+  auditLogs    AuditLog[]
+  usageRecords UsageRecord[]
+  runners      Runner[]
+
+  @@map("workspaces")
+}
+
+model Membership {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  role        WorkspaceRole @default(DEVELOPER)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@map("memberships")
+}
+
+model Invitation {
+  id          String           @id @default(uuid()) @db.Uuid
+  workspaceId String           @map("workspace_id") @db.Uuid
+  email       String
+  role        WorkspaceRole    @default(DEVELOPER)
+  token       String           @unique
+  invitedById String           @map("invited_by_id") @db.Uuid
+  status      InvitationStatus @default(PENDING)
+  expiresAt   DateTime         @map("expires_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy   User             @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, status])
+  @@map("invitations")
+}
+
+model WorkspaceSetting {
+  id                    String    @id @default(uuid()) @db.Uuid
+  workspaceId           String    @unique @map("workspace_id") @db.Uuid
+  maxConcurrency        Int       @default(2) @map("max_concurrency")
+  maxExecutionSeconds   Int       @default(600) @map("max_execution_seconds")
+  monthlyBudgetCents    Int       @default(5000) @map("monthly_budget_cents")
+  allowedRepos          Json      @default("[]") @map("allowed_repos")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_settings")
+}
+
+model RepositoryInstallation {
+  id           String             @id @default(uuid()) @db.Uuid
+  workspaceId  String             @map("workspace_id") @db.Uuid
+  provider     RepositoryProvider @default(GITHUB)
+  installationId String           @unique @map("installation_id")
+  accountLogin String             @map("account_login")
+  accountType  String             @map("account_type")
+  permissions  Json               @default("{}")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  workspace    Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projects     Project[]
+
+  @@map("repository_installations")
+}
+
+model Project {
+  id                       String                  @id @default(uuid()) @db.Uuid
+  workspaceId              String                  @map("workspace_id") @db.Uuid
+  repositoryInstallationId String?                 @map("repository_installation_id") @db.Uuid
+  name                     String
+  repoOwner                String                  @map("repo_owner")
+  repoName                 String                  @map("repo_name")
+  defaultBranch            String                  @default("main") @map("default_branch")
+  testCommand              String?                 @default("npm test") @map("test_command")
+  buildCommand             String?                 @default("npm run build") @map("build_command")
+  createdAt                DateTime                @default(now()) @map("created_at")
+  updatedAt                DateTime                @updatedAt @map("updated_at")
+
+  workspace                Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  installation             RepositoryInstallation? @relation(fields: [repositoryInstallationId], references: [id], onDelete: SetNull)
+  tasks                    Task[]
+  usageRecords             UsageRecord[]
+
+  @@index([workspaceId])
+  @@map("projects")
+}
+
+model Task {
+  id           String            @id @default(uuid()) @db.Uuid
+  workspaceId  String            @map("workspace_id") @db.Uuid
+  projectId    String            @map("project_id") @db.Uuid
+  createdById  String            @map("created_by_id") @db.Uuid
+  title        String
+  description  String?
+  priority     TaskPriority      @default(MEDIUM)
+  status       TaskStatus        @default(QUEUED)
+  branchName   String?           @map("branch_name")
+  targetBranch String            @default("main") @map("target_branch")
+  version      Int               @default(1)
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  workspace    Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy    User              @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  runs         Run[]
+  approvals    Approval[]
+  dependencies TaskDependency[]  @relation("TaskDependencies")
+  dependedOnBy TaskDependency[]  @relation("TaskDependedOnBy")
+
+  @@index([workspaceId, projectId, status])
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("tasks")
+}
+
+model TaskDependency {
+  id              String   @id @default(uuid()) @db.Uuid
+  taskId          String   @map("task_id") @db.Uuid
+  dependsOnTaskId String   @map("depends_on_task_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  task            Task     @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTask   Task     @relation("TaskDependedOnBy", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dependsOnTaskId])
+  @@map("task_dependencies")
+}
+
+model Run {
+  id              String        @id @default(uuid()) @db.Uuid
+  taskId          String        @map("task_id") @db.Uuid
+  workspaceId     String        @map("workspace_id") @db.Uuid
+  attemptNumber   Int           @map("attempt_number")
+  status          RunStatus     @default(PENDING)
+  workerId        String?       @map("worker_id")
+  leaseExpiresAt  DateTime?     @map("lease_expires_at")
+  startedAt       DateTime?     @map("started_at")
+  completedAt     DateTime?     @map("completed_at")
+  durationMs      Int?          @map("duration_ms")
+  exitCode        Int?          @map("exit_code")
+  errorMessage    String?       @map("error_message")
+  promptTokens    Int?          @map("prompt_tokens")
+  completionTokens Int?         @map("completion_tokens")
+  costCents       Int?          @map("cost_cents")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  task            Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  events          RunEvent[]
+  artifacts       Artifact[]
+  approvals       Approval[]
+  usageRecords    UsageRecord[]
+
+  @@unique([taskId, attemptNumber])
+  @@index([status, leaseExpiresAt])
+  @@index([workspaceId, taskId, attemptNumber(sort: Desc)])
+  @@map("runs")
+}
+
+model RunEvent {
+  id             String       @id @default(uuid()) @db.Uuid
+  runId          String       @map("run_id") @db.Uuid
+  sequenceNumber BigInt       @map("sequence_number")
+  type           RunEventType
+  payload        Json
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  run            Run          @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sequenceNumber])
+  @@index([runId, sequenceNumber(sort: Asc)])
+  @@map("run_events")
+}
+
+model Artifact {
+  id             String       @id @default(uuid()) @db.Uuid
+  runId          String       @map("run_id") @db.Uuid
+  workspaceId    String       @map("workspace_id") @db.Uuid
+  type           ArtifactType
+  storagePath    String       @map("storage_path")
+  fileSizeBytes  BigInt       @map("file_size_bytes")
+  checksumSha256 String       @map("checksum_sha256")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  run            Run          @relation(fields: [runId], references: [id], onDelete: Cascade)
+  workspace      Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([runId, type])
+  @@index([workspaceId])
+  @@map("artifacts")
+}
+
+model Approval {
+  id             String         @id @default(uuid()) @db.Uuid
+  taskId         String         @map("task_id") @db.Uuid
+  runId          String         @map("run_id") @db.Uuid
+  workspaceId    String         @map("workspace_id") @db.Uuid
+  reviewerId     String         @map("reviewer_id") @db.Uuid
+  status         ApprovalStatus
+  reviewNotes    String?        @map("review_notes")
+  mergeCommitSha String?        @map("merge_commit_sha")
+  reviewedAt     DateTime       @default(now()) @map("reviewed_at")
+
+  task           Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  run            Run            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  workspace      Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  reviewer       User           @relation("TaskApprover", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([taskId])
+  @@index([workspaceId])
+  @@map("approvals")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  actorId     String?  @map("actor_id") @db.Uuid
+  action      String
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id") @db.Uuid
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor       User?     @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+model OutboxEvent {
+  id            String       @id @default(uuid()) @db.Uuid
+  eventType     String       @map("event_type")
+  aggregateType String       @map("aggregate_type")
+  aggregateId   String       @map("aggregate_id") @db.Uuid
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  retryCount    Int          @default(0) @map("retry_count")
+  scheduledFor  DateTime     @default(now()) @map("scheduled_for")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  publishedAt   DateTime?    @map("published_at")
+
+  @@index([status, scheduledFor, createdAt])
+  @@map("outbox_events")
+}
+
+model UsageRecord {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  projectId   String?   @map("project_id") @db.Uuid
+  runId       String?   @map("run_id") @db.Uuid
+  metricType  String    @map("metric_type")
+  quantity    Int
+  costMicros  Int       @map("cost_micros")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  run         Run?      @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@map("usage_records")
+}
+
+model Runner {
+  id              String        @id @default(uuid()) @db.Uuid
+  workspaceId     String        @map("workspace_id") @db.Uuid
+  name            String
+  hostname        String?
+  status          RunnerStatus  @default(ONLINE)
+  token           String        @unique
+  lastHeartbeatAt DateTime      @default(now()) @map("last_heartbeat_at")
+  registeredAt    DateTime      @default(now()) @map("registered_at")
+  labels          Json          @default("[]")
+  currentRunId    String?       @map("current_run_id") @db.Uuid
+
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("runners")
+}
+

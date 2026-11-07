@@ -1,0 +1,28 @@
+{
+  "name": "@agentforge/worker",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/worker.js",
+  "types": "./dist/worker.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "start": "node dist/worker.js",
+    "dev": "tsx watch src/worker.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentforge/agent-adapters": "*",
+    "@agentforge/db": "*",
+    "@agentforge/sandbox": "*",
+    "@agentforge/shared": "*",
+    "bullmq": "^5.31.2",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.6"
+  }
+}
